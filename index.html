@@ -4,10 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebGPU Typescript Starter</title>
+    <style>
+      #drop-area {
+        border: 2px dashed #ccc;
+        border-radius: 20px;
+        width: 300px;
+        height: 200px;
+        font-family: sans-serif;
+        margin: 50px auto;
+        padding: 20px;
+        text-align: center;
+        transition: border 0.3s ease;
+      }
+      #drop-area.dragging {
+        border-color: #000;
+      }
+    </style>
   </head>
   <body>
     <h1 id="title">WebGPU Typescript Starter</h1>
-    <canvas id="webgpu-canvas" />
+    <canvas id="webgpu-canvas"></canvas>
+    <div id="drop-area">Drag and drop your CSV or Excel file here</div>
     <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/excel.ts"></script>
   </body>
 </html>
