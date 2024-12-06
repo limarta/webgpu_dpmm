@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@tweakpane/core": "^1.1.7",
+    "@types/plotly.js": "^2.35.1",
     "@webgpu/types": "^0.1.31",
     "typescript": "^5.0.4",
     "vite": "^4.3.1",
@@ -16,8 +17,8 @@
   },
   "dependencies": {
     "papaparse": "^5.4.1",
+    "plotly.js-dist": "^2.35.2",
     "tweakpane": "^3.1.8",
-    "wgpu-matrix": "^3.2.0",
-    "xlsx": "^0.18.5"
+    "wgpu-matrix": "^3.2.0"
   }
 }

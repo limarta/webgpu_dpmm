@@ -1,9 +1,6 @@
 import { GPUUtils } from './utils/gpu.ts';
-
-// Note: You can import your separate WGSL shader files like this.
-// import triangleVertWGSL from './shaders/triangle.vert.wgsl';
-// import fragWGSL from './shaders/red.frag.wgsl';
 import randomWGSL from './shaders/random.wgsl'
+import Plotly from 'plotly.js-dist';
 
 
 export default async function init(
@@ -17,7 +14,7 @@ export default async function init(
     alphaMode: 'opaque',
   });
 
-  const N = 16;
+  const N = 256;
   const seedInit = Array.from({length: 4*N}, ()=>Math.floor(Math.random()*100000));
   const seedBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(seedInit));
   const randBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N));
@@ -59,7 +56,7 @@ export default async function init(
   const passEncoder = commandEncoder.beginComputePass();
   passEncoder.setPipeline(computePipeline);
   passEncoder.setBindGroup(0, bind_group);
-  passEncoder.dispatchWorkgroups(16, 1, 1)
+  passEncoder.dispatchWorkgroups(256, 1, 1)
   passEncoder.end();
 
   const srcBuffer = device.createBuffer({
@@ -79,4 +76,25 @@ export default async function init(
   await srcBuffer.mapAsync(GPUMapMode.READ);
   const data = new Float32Array(srcBuffer.getMappedRange());
   console.log("Data: ", data);
+
+  const plotData = [{
+    x: data,
+    type: 'histogram',
+    xbins: {
+      size: 0.1,
+    }
+  }];
+
+  const layout = {
+    title: 'Histogram of Data',
+    xaxis: { title: 'Value' },
+    yaxis: { title: 'Count' },
+  };
+
+  const plotHtml = Plotly.newPlot('test', plotData, layout).then((gd) => {
+    return Plotly.toImage(gd, { format: 'png', width: 800, height: 600 });
+  });
+  // const plotHtml = Plotly.newPlot('plot', plotData, layout).then((gd) => {
+  //   return Plotly.toImage(gd, { format: 'png', width: 800, height: 600 });
+  // });
 }
