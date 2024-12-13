@@ -21,19 +21,22 @@ export async function sum(device: GPUDevice, arr: Float32Array) {
             buffer: {
                 type: "storage"
             }
-        }
-    ]
+        },
+    ],
   });
 
+
   const arrayBuffer = GPUUtils.createStorageBuffer(device, arr, true)
-  const _ans = new Float32Array(256);
-  const ansBuffer = GPUUtils.createStorageBuffer(device, _ans);
+  const N_intermediate = Math.ceil(arr.length / 128);
+  const intermediateBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N_intermediate));
+  const intermediateBuffer2 = GPUUtils.createStorageBuffer(device, new Float32Array(128));
+  const sumBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(1), true);
   const copyBuffer = device.createBuffer({
-    size: _ans.byteLength,
+    size: sumBuffer.size,
     usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
   });
 
-  const bindGroup = device.createBindGroup({
+  const bindGroup1 = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
         {
@@ -45,14 +48,52 @@ export async function sum(device: GPUDevice, arr: Float32Array) {
         {
             binding: 1,
             resource: {
-                buffer: ansBuffer
+                buffer: intermediateBuffer
             }
         }
     ]
   });
+
+  const bindGroup2 = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+        {
+            binding: 0,
+            resource: {
+                buffer: intermediateBuffer
+            }
+        },
+        {
+            binding: 1,
+            resource: {
+                buffer: intermediateBuffer2
+            }
+        }
+    ]
+  });
+
+  const bindGroup3 = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+        {
+            binding: 0,
+            resource: {
+                buffer: intermediateBuffer2
+            }
+        },
+        {
+            binding: 1,
+            resource: {
+                buffer: sumBuffer
+            }
+        }
+    ]
+  });
+
   const pipelineLayout = device.createPipelineLayout({
     bindGroupLayouts: [bindGroupLayout]
   });
+  
 
   const pipeline = device.createComputePipeline({
     layout: pipelineLayout,
@@ -62,32 +103,44 @@ export async function sum(device: GPUDevice, arr: Float32Array) {
     }
   });
 
-  const encoder = device.createCommandEncoder();
-
-  const pass = encoder.beginComputePass();
-  pass.setBindGroup(0, bindGroup);
-  pass.setPipeline(pipeline);
   let start = performance.now();
-  pass.dispatchWorkgroups(256, 1, 1)
-  pass.end()
+  for(let i = 0 ; i < 100 ; i++) {
+    const encoder = device.createCommandEncoder();
 
+    const pass = encoder.beginComputePass();
+    pass.setBindGroup(0, bindGroup1);
+    pass.setPipeline(pipeline);
+    pass.dispatchWorkgroups(N_intermediate, 1, 1)
+    
+    pass.setBindGroup(0, bindGroup2);
+    pass.dispatchWorkgroups(128, 1, 1)
 
+    pass.setBindGroup(0, bindGroup3);
+    pass.dispatchWorkgroups(1, 1, 1)
+    pass.end()
+
+    const gpuCommands = encoder.finish()
+    device.queue.submit([gpuCommands])
+  }
+
+  const encoder = device.createCommandEncoder();
   encoder.copyBufferToBuffer(
-    ansBuffer, 0,
-    copyBuffer, 0, _ans.byteLength
+    sumBuffer, 0,
+    copyBuffer, 0, 4,
   )
-
   const gpuCommands = encoder.finish()
   device.queue.submit([gpuCommands])
-  let duration = performance.now() - start;
 
   await copyBuffer.mapAsync(GPUMapMode.READ);
+  let duration = performance.now() - start;
   const data = new Float32Array(copyBuffer.getMappedRange());
-  console.log(data);
   console.log(`Duration ${duration.toFixed(2)} ms`);
 
   start = performance.now()
-  const s = arr.reduce((s, cur) => s + cur, 0)
+  let s = 0;
+  for(let i = 0 ; i < 100 ; i++) {
+    s = arr.reduce((s, cur) => s + cur, 0)
+  }
   console.log("Sum s ", s)
   duration = performance.now() - start;
   console.log(`Duration ${duration.toFixed(2)} ms`);
