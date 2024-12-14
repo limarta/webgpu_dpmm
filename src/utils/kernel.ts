@@ -1,5 +1,6 @@
 import {GPUUtils} from './gpu'
 import SumKernelCode from '../shaders/kernels/sum.wgsl'
+import UnsortedSegmentSumCode from '../shaders/kernels/unsorted_segment_sum.wgsl'
 
 namespace Kernels {
 export async function sum(device: GPUDevice, arr: Float32Array) {
@@ -145,6 +146,152 @@ export async function sum(device: GPUDevice, arr: Float32Array) {
   duration = performance.now() - start;
   console.log(`Duration ${duration.toFixed(2)} ms`);
 
+}
+
+
+export async function unsorted_segment_sum(
+    device: GPUDevice, 
+    data:Float32Array, 
+    segment_ids: Uint32Array, 
+    num_segments: number
+) {
+    if (data.length != segment_ids.length) {
+        throw RangeError(`data length ${data.length} different from segment ids ${segment_ids.length}`);
+    }
+    const inputBuffer = GPUUtils.createStorageBuffer(device, data);
+    const segmentBuffer = GPUUtils.createStorageBuffer(device, segment_ids);
+    const segmentCountUniform = GPUUtils.createUniform(device, new Uint32Array([num_segments]));
+
+    const N_intermediate = Math.ceil(data.length / 32);
+    const intermediateBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N_intermediate * num_segments));
+    const sumBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(num_segments));
+
+    const bindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "read-only-storage"
+                }
+            },
+            {
+                binding: 1,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "read-only-storage"
+                }
+            },
+            {
+                binding: 2,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform"
+                }
+            },
+            {
+                binding: 3,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "storage"
+                }
+            }
+        ]
+    });
+
+    const bindGroup1 = device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: inputBuffer,
+                }
+            },
+            {
+                binding: 1,
+                resource: {
+                    buffer: segmentBuffer,
+                } 
+            },
+            {
+                binding: 2,
+                resource: {
+                    buffer: segmentCountUniform,
+                } 
+            },
+            {
+                binding: 3,
+                resource: {
+                    buffer: intermediateBuffer
+                }
+            }
+        ]
+    });
+
+    // const bindGroup2 = device.createBindGroup({
+    //     layout: bindGroupLayout,
+    //     entries: [
+    //         {
+    //             binding: 0,
+    //             resource: {
+    //                 buffer: intermediateBuffer,
+    //             }
+    //         },
+    //         {
+    //             binding: 1,
+    //             resource: {
+    //                 buffer: sumBuffer,
+    //             }
+    //         }
+    //     ],
+    // });
+
+    const pipelineLayout = device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout]
+    });
+
+    const computeShaderModule = device.createShaderModule({
+        code: UnsortedSegmentSumCode,
+    });
+    const pipeline = device.createComputePipeline({
+        layout: pipelineLayout,
+        compute: {
+            module: computeShaderModule,
+            entryPoint: "main"
+        }
+    });
+
+
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginComputePass();
+
+    pass.setBindGroup(0, bindGroup1);
+    pass.setPipeline(pipeline)
+    pass.dispatchWorkgroups(N_intermediate, num_segments);
+
+    // pass.setBindGroup(0, bindGroup2);
+    // pass.setPipeline(pipeline) // switch to something else?
+    // pass.dispatchWorkgroups(64, 1, 1);
+    pass.end();
+
+    const cpuBuffer = device.createBuffer({
+        size: 4*num_segments*N_intermediate,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+
+    encoder.copyBufferToBuffer(
+        intermediateBuffer, 0,
+        cpuBuffer, 0,
+        4*num_segments*N_intermediate
+    );
+
+    const GPUCommands = encoder.finish();
+    device.queue.submit([GPUCommands])
+
+    await cpuBuffer.mapAsync(GPUMapMode.READ)
+    const ans = new Float32Array(cpuBuffer.getMappedRange());
+    console.log(ans);
 }
 }
 
