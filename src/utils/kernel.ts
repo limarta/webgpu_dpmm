@@ -1,6 +1,7 @@
 import {GPUUtils} from './gpu'
 import SumKernelCode from '../shaders/kernels/sum.wgsl'
 import UnsortedSegmentSumCode from '../shaders/kernels/unsorted_segment_sum.wgsl'
+import Sum2DKernelCode from '../shaders/kernels/sum_2d.wgsl'
 
 namespace Kernels {
 export async function sum(device: GPUDevice, arr: Float32Array) {
@@ -148,6 +149,142 @@ export async function sum(device: GPUDevice, arr: Float32Array) {
 
 }
 
+/**
+ * Computes a sum along the specific axis. 
+ * @param device 
+ * @param arr 
+ * @param M 
+ * @param N 
+ * @param axis 
+ */
+export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: number, axis:number=1) {
+    const shaderCode = device.createShaderModule({
+        code: Sum2DKernelCode
+    })
+
+    const dimensionUniform = GPUUtils.createUniform(device, new Uint32Array([M, N]));
+    const axisUniform = GPUUtils.createUniform(device, new Uint32Array([axis]));
+    const inputBuffer = GPUUtils.createStorageBuffer(device, arr);
+
+    let N_intermediate = 0;
+    if (axis == 0) {
+        N_intermediate = Math.ceil(M/32) * N;
+    } else {
+        N_intermediate = M * Math.ceil(N/32);
+    }
+
+    const intermediateBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N_intermediate));
+
+    const bindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform"
+                }
+            },
+            {
+                binding: 1,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform"
+                }
+            },
+            {
+                binding: 2,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "read-only-storage"
+                }
+            },
+            {
+                binding: 3,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "storage"
+                }
+            }
+        ]
+    });
+
+    const bindGroup = device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: dimensionUniform
+                }
+            },
+            {
+                binding: 1,
+                resource: {
+                    buffer: axisUniform
+                }
+            },
+            {
+                binding: 2,
+                resource: {
+                    buffer: inputBuffer
+                }
+            },
+            {
+                binding: 3,
+                resource: {
+                    buffer: intermediateBuffer
+                }
+            }
+        ]
+    });
+
+    const pipelineLayout = device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout]
+    });
+
+    const pipeline = device.createComputePipeline({
+        layout: pipelineLayout,
+        compute: {
+            module: shaderCode,
+            entryPoint: "main",
+        } 
+    });
+
+    const encoder = device.createCommandEncoder();
+
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(2,3,1)
+
+    pass.end();
+
+    const cpuBuffer = device.createBuffer({
+        size: N_intermediate*4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+    });
+    encoder.copyBufferToBuffer(
+        intermediateBuffer, 0,
+        cpuBuffer, 0,
+        N_intermediate*4,
+    );
+
+    const commands = encoder.finish();
+
+    device.queue.submit([commands])
+
+    await cpuBuffer.mapAsync(GPUMapMode.READ)
+    const ans = new Float32Array(cpuBuffer.getMappedRange());
+
+    if (axis == 1) {
+        for (let i = 0; i < M; i++) {
+            console.log(ans.slice(i * Math.ceil(N / 32), (i + 1) * Math.ceil(N / 32)));
+        }
+    }
+
+
+}
+
 
 export async function unsorted_segment_sum(
     device: GPUDevice, 
@@ -269,7 +406,7 @@ export async function unsorted_segment_sum(
     pass.setBindGroup(0, bindGroup1);
     pass.setPipeline(pipeline)
     pass.dispatchWorkgroups(N_intermediate, num_segments);
-
+    
     // pass.setBindGroup(0, bindGroup2);
     // pass.setPipeline(pipeline) // switch to something else?
     // pass.dispatchWorkgroups(64, 1, 1);
@@ -291,7 +428,7 @@ export async function unsorted_segment_sum(
 
     await cpuBuffer.mapAsync(GPUMapMode.READ)
     const ans = new Float32Array(cpuBuffer.getMappedRange());
-    console.log(ans);
+    console.log(ans)
 }
 }
 
