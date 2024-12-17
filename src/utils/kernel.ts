@@ -255,7 +255,11 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
     const pass = encoder.beginComputePass();
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, bindGroup);
-    pass.dispatchWorkgroups(2,3,1)
+    if (axis == 0) {
+        pass.dispatchWorkgroups(N, Math.ceil(M/32),1);
+    } else {
+        pass.dispatchWorkgroups(Math.ceil(N/32), M, 1);
+    }
 
     pass.end();
 

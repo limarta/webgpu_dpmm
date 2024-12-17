@@ -19,7 +19,7 @@ async function initializeWebGPU() {
   const canvas = document.querySelector<HTMLCanvasElement>('#webgpu-canvas');
   assert(canvas !== null);
   const context = canvas.getContext('webgpu') as GPUCanvasContext;
-
+  
   init(context, device);  // Remove me!
 }
 
