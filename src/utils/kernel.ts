@@ -150,30 +150,27 @@ export async function sum(device: GPUDevice, arr: Float32Array) {
 }
 
 /**
- * Computes a sum along the specific axis. 
+ * Reduces each row of a matrix to its sum.
  * @param device 
  * @param arr 
  * @param M 
  * @param N 
  * @param axis 
  */
-export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: number, axis:number=1) {
+export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: number) {
     const shaderCode = device.createShaderModule({
         code: Sum2DKernelCode
     })
 
     const dimensionUniform = GPUUtils.createUniform(device, new Uint32Array([M, N]));
-    const axisUniform = GPUUtils.createUniform(device, new Uint32Array([axis]));
+    const axisUniform = GPUUtils.createUniform(device, new Uint32Array([1]));
     const inputBuffer = GPUUtils.createStorageBuffer(device, arr);
 
-    let N_intermediate = 0;
-    if (axis == 0) {
-        N_intermediate = Math.ceil(M/32) * N;
-    } else {
-        N_intermediate = M * Math.ceil(N/32);
-    }
+    const nTPB = 16;
+    const MAX_BLOCKS_X = Math.ceil(N/(2*nTPB))
+    const INTERMEDIATE_LENGTH = M * MAX_BLOCKS_X;
 
-    const intermediateBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N_intermediate));
+    const intermediateBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(INTERMEDIATE_LENGTH));
 
     const bindGroupLayout = device.createBindGroupLayout({
         entries: [
@@ -246,31 +243,44 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
         layout: pipelineLayout,
         compute: {
             module: shaderCode,
-            entryPoint: "main",
+            entryPoint: "sum_2d_within_block",
+            constants: {
+                nTPB: nTPB,
+                TMP_LEN: 2*nTPB
+            }
         } 
+    });
+
+    const pipelineLayout2 = device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout]
+    });
+    const pipeline2 = device.createComputePipeline({
+        layout: pipelineLayout2,
+        compute: {
+            module: shaderCode,
+            entryPoint: "sum_2d_final"
+        }
     });
 
     const encoder = device.createCommandEncoder();
 
     const pass = encoder.beginComputePass();
+    // apply first kernel
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, bindGroup);
-    if (axis == 0) {
-        pass.dispatchWorkgroups(N, Math.ceil(M/32),1);
-    } else {
-        pass.dispatchWorkgroups(Math.ceil(N/32), M, 1);
-    }
+    pass.dispatchWorkgroups(MAX_BLOCKS_X, M, 1);
 
+    // apply final kernel
     pass.end();
 
     const cpuBuffer = device.createBuffer({
-        size: N_intermediate*4,
+        size: INTERMEDIATE_LENGTH*4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
     encoder.copyBufferToBuffer(
         intermediateBuffer, 0,
         cpuBuffer, 0,
-        N_intermediate*4,
+        INTERMEDIATE_LENGTH*4,
     );
 
     const commands = encoder.finish();
@@ -280,10 +290,8 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
     await cpuBuffer.mapAsync(GPUMapMode.READ)
     const ans = new Float32Array(cpuBuffer.getMappedRange());
 
-    if (axis == 1) {
-        for (let i = 0; i < M; i++) {
-            console.log(ans.slice(i * Math.ceil(N / 32), (i + 1) * Math.ceil(N / 32)));
-        }
+    for (let i = 0; i < M; i++) {
+        console.log(ans.slice(i * MAX_BLOCKS_X, (i + 1) * MAX_BLOCKS_X));
     }
 
 
@@ -399,8 +407,8 @@ export async function unsorted_segment_sum(
         layout: pipelineLayout,
         compute: {
             module: computeShaderModule,
-            entryPoint: "main"
-        }
+            entryPoint: "main",
+        },
     });
 
 
