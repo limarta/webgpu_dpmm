@@ -170,7 +170,6 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
         code: Sum2DKernelCode
     })
 
-    // const dimensionUniform = GPUUtils.createUniform(device, new Uint32Array([N, M]));
     const dimensionUniform = device.createBuffer({
         label: "dimension_uniform",
         size: 256*5, // assumption: at most 5 reductions
@@ -178,14 +177,13 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
     })
     const UNIFORM_STRIDE = 256;
     for(let i = 0 ; i < COL_SIZES.length; i++) {
-        console.log(COL_SIZES[i]);
         device.queue.writeBuffer(dimensionUniform, i*UNIFORM_STRIDE, new Uint32Array([COL_SIZES[i], M]));
     }
     const inputBuffer = GPUUtils.createStorageBuffer(device, arr);
 
 
     const intermediateBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(INTERMEDIATE_LENGTH));
-    const sumBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M));
+    // const sumBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M));
 
     const bindGroupLayout = device.createBindGroupLayout({
         entries: [
@@ -211,13 +209,6 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
                     type: "storage"
                 }
             },
-            {
-                binding: 3,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "storage"
-                }
-            }
         ]
     });
 
@@ -244,12 +235,6 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
                     buffer: intermediateBuffer
                 }
             },
-            {
-                binding: 3,
-                resource: {
-                    buffer: sumBuffer
-                }
-            }
         ]
     });
 
@@ -275,12 +260,6 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
                     buffer: inputBuffer
                 }
             },
-            {
-                binding: 3,
-                resource: {
-                    buffer: sumBuffer
-                }
-            }
         ]
     });
 
@@ -315,22 +294,30 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
     const pass = encoder.beginComputePass();
     // apply first kernel
     pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup1, [0,]);
-    pass.dispatchWorkgroups(MAX_BLOCKS_X, M, 1);
+    for(let i = 0 ; i < COL_SIZES.length; i++) {
+        if (i % 2 ==0) {
+            var bg = bindGroup1;
+        } else {
+            var bg = bindGroup2;
+        }
+        pass.setBindGroup(0, bg, [i*UNIFORM_STRIDE,]);
+        var workgroups = Math.ceil(COL_SIZES[i]/nTPB);
+        pass.dispatchWorkgroups(workgroups, M, 1);
+    }
 
-    // apply final kernel
-    pass.setBindGroup(0, bindGroup2, [256,])
-    pass.setPipeline(pipeline_final);
-    pass.dispatchWorkgroups(1, M, 1);
     pass.end();
 
     const cpuBuffer = device.createBuffer({
         size: M*4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
+    if (COL_SIZES.length % 2 == 0) {
+        var outBuffer = inputBuffer;
+    } else {
+        var outBuffer = intermediateBuffer;
+    }
     encoder.copyBufferToBuffer(
-        // intermediateBuffer, 0,
-        sumBuffer, 0,
+        outBuffer, 0,
         cpuBuffer, 0,
         M*4,
     );
@@ -347,7 +334,7 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
     // }
 
     console.log(ans);
-
+    return ans;
 
 }
 
@@ -473,9 +460,6 @@ export async function unsorted_segment_sum(
     pass.setPipeline(pipeline)
     pass.dispatchWorkgroups(N_intermediate, num_segments);
     
-    // pass.setBindGroup(0, bindGroup2);
-    // pass.setPipeline(pipeline) // switch to something else?
-    // pass.dispatchWorkgroups(64, 1, 1);
     pass.end();
 
     const cpuBuffer = device.createBuffer({
@@ -494,7 +478,10 @@ export async function unsorted_segment_sum(
 
     await cpuBuffer.mapAsync(GPUMapMode.READ)
     const ans = new Float32Array(cpuBuffer.getMappedRange());
-    console.log(ans)
+    console.log(ans);
+    console.log("num segments ", 2)
+    console.log("N_intermediate ", N_intermediate)
+    sum_2d(device, ans, num_segments, N_intermediate);
 }
 }
 
