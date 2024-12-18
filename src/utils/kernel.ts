@@ -162,15 +162,15 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
         code: Sum2DKernelCode
     })
 
-    const dimensionUniform = GPUUtils.createUniform(device, new Uint32Array([M, N]));
-    const axisUniform = GPUUtils.createUniform(device, new Uint32Array([1]));
+    const dimensionUniform = GPUUtils.createUniform(device, new Uint32Array([N, M]));
     const inputBuffer = GPUUtils.createStorageBuffer(device, arr);
 
     const nTPB = 16;
-    const MAX_BLOCKS_X = Math.ceil(N/(2*nTPB))
+    const MAX_BLOCKS_X = Math.ceil(N/(nTPB))
     const INTERMEDIATE_LENGTH = M * MAX_BLOCKS_X;
 
     const intermediateBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(INTERMEDIATE_LENGTH));
+    const sumBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M));
 
     const bindGroupLayout = device.createBindGroupLayout({
         entries: [
@@ -178,21 +178,22 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
                 binding: 0,
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {
-                    type: "uniform"
+                    type: "uniform",
+                    hasDynamicOffset: true,
                 }
             },
             {
                 binding: 1,
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {
-                    type: "uniform"
+                    type: "read-only-storage"
                 }
             },
             {
                 binding: 2,
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {
-                    type: "read-only-storage"
+                    type: "storage"
                 }
             },
             {
@@ -204,6 +205,11 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
             }
         ]
     });
+
+    const COL_SIZES = [];
+    for(let N_=N; N_ > 0; N_ = Math.floor(N_/nTPB)){
+        COL_SIZES.push(N_);
+    }
 
     const bindGroup = device.createBindGroup({
         layout: bindGroupLayout,
@@ -217,23 +223,24 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
             {
                 binding: 1,
                 resource: {
-                    buffer: axisUniform
+                    buffer: inputBuffer
                 }
             },
             {
                 binding: 2,
                 resource: {
-                    buffer: inputBuffer
+                    buffer: intermediateBuffer
                 }
             },
             {
                 binding: 3,
                 resource: {
-                    buffer: intermediateBuffer
+                    buffer: sumBuffer
                 }
             }
         ]
     });
+
 
     const pipelineLayout = device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayout]
@@ -246,20 +253,19 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
             entryPoint: "sum_2d_within_block",
             constants: {
                 nTPB: nTPB,
-                TMP_LEN: 2*nTPB
             }
         } 
     });
 
-    const pipelineLayout2 = device.createPipelineLayout({
-        bindGroupLayouts: [bindGroupLayout]
-    });
-    const pipeline2 = device.createComputePipeline({
-        layout: pipelineLayout2,
+    const pipeline_final = device.createComputePipeline({
+        layout: pipelineLayout,
         compute: {
             module: shaderCode,
-            entryPoint: "sum_2d_final"
-        }
+            entryPoint: "sum_2d_final",
+            constants: {
+                nTPB: nTPB,
+            }
+        },
     });
 
     const encoder = device.createCommandEncoder();
@@ -267,10 +273,12 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
     const pass = encoder.beginComputePass();
     // apply first kernel
     pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
+    pass.setBindGroup(0, bindGroup, [0,]);
     pass.dispatchWorkgroups(MAX_BLOCKS_X, M, 1);
 
     // apply final kernel
+    pass.setPipeline(pipeline_final);
+    pass.dispatchWorkgroups(1, M, 1);
     pass.end();
 
     const cpuBuffer = device.createBuffer({
