@@ -56,7 +56,35 @@ fn sum_2d_final(
     @builtin(num_workgroups) num_workgroups: vec3<u32>,
 ) {
     let GRID_STRIDE: u32 = nTPB;
+    let COLS: u32 = dims.x;
     let ROWS: u32 = dims.y;
 
-    // var idx: u32 = local_invocation_id.x
+    var idx: u32 = local_invocation_id.x;
+    let idy: u32 = workgroup_id.y;
+
+    let thid: u32 = local_invocation_id.x;
+    var val:f32 = 0;
+    while (idx < COLS) {
+        val += input[idy*COLS + idx];
+        idx += GRID_STRIDE;
+    }
+    temp[thid] = val;
+
+    workgroupBarrier();
+
+    var offset:u32 = 1;
+    for (var d = TMP_LEN>>1; d > 0; d >>= 1) {
+        if (thid < d)
+        {
+            var ai:u32 = offset*(2*thid+1)-1;
+            var bi:u32 = offset*(2*thid+2)-1;
+            temp[bi] += temp[ai];
+        }
+        offset *= 2;
+        workgroupBarrier();
+    }
+    
+    if (thid == 0) {
+        sum[idy] = temp[TMP_LEN-1];
+    }
 }
