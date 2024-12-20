@@ -6,7 +6,6 @@
 override nTPB:u32 = 16;
 const N_w: u32 = 4;
 const C20: u32 = 0xA9FC1A22;
-// const C20: u32 = 0x1BD11BDAA9FC1A22;
 const R: u32 = 12;
 @compute @workgroup_size(nTPB,1,1)
 fn threefry(

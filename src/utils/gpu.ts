@@ -72,6 +72,36 @@ export function createBindGroup(device: GPUDevice, layout: GPUBindGroupLayout, b
     );
 }
 
+export async function log(device:GPUDevice, buffer:GPUBuffer, uint: boolean) {
+    const cpuBuffer = device.createBuffer({
+        size: buffer.size,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(
+        buffer, 0,
+        cpuBuffer, 0,
+        buffer.size
+    );
+    const gpuCommands = encoder.finish();
+    device.queue.submit([gpuCommands]);
+
+    await cpuBuffer.mapAsync(GPUMapMode.READ);
+
+    const arr_ = cpuBuffer.getMappedRange();
+    if (uint) {
+        let arr = new Uint32Array(arr_);
+        console.log(arr);
+    } else {
+        let arr = new Float32Array(arr_);
+        console.log(arr);
+    }
+    cpuBuffer.unmap();
+    cpuBuffer.destroy();
+
+}
+
 }
 
 export {GPUUtils};

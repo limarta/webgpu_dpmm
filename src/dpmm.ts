@@ -16,19 +16,18 @@ export default async function init(
   });
 
   const seed = new Uint32Array([0,0,0,1]);
-  const N = 1000000;
-  const rng = await Random.threefry(device, seed, N);
-  const mappedRng = new Float32Array(N*4);
-  for (let i = 0; i < N*4; i++) {
-    mappedRng[i] = rng[i] / 0xFFFFFFFF;
-  }
+  const N = 40000;
+  // const rng = await Random.threefry(device, seed, N);
+  const samples = await Random.normal(device, seed, N);
+  // const samples = await Random.uniform(device, seed, N);
+  // const mappedRng = new Float32Array(N*4);
   const plotData = [{
-    x: mappedRng,
+    x: samples,
     type: 'histogram',
     xbins: {
-      start: 0,
-      end: 1,
-      size: (1 - 0) / 10
+      // start: 0,
+      // end: 1,
+      // size: (1 - 0) / 10
     },
     histnorm: 'probability'
   }];
