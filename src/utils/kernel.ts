@@ -180,10 +180,7 @@ export async function sum_2d(device: GPUDevice, arr: Float32Array, M:number, N: 
         device.queue.writeBuffer(dimensionUniform, i*UNIFORM_STRIDE, new Uint32Array([COL_SIZES[i], M]));
     }
     const inputBuffer = GPUUtils.createStorageBuffer(device, arr);
-
-
     const intermediateBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(INTERMEDIATE_LENGTH));
-    // const sumBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M));
 
     const bindGroupLayout = device.createBindGroupLayout({
         entries: [

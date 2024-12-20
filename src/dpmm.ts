@@ -1,7 +1,8 @@
 import { GPUUtils } from './utils/gpu.ts';
-import randomWGSL from './shaders/random.wgsl'
+import randomWGSL from './shaders/distributions/random.wgsl'
 import Plotly from 'plotly.js-dist';
 import {Kernels} from './utils/kernel.ts'
+import {Random} from './utils/rng.ts'
 
 export default async function init(
   context: GPUCanvasContext,
@@ -14,16 +15,46 @@ export default async function init(
     alphaMode: 'opaque',
   });
 
+  const seed = new Uint32Array([0,0,0,1]);
+  const N = 1000000;
+  const rng = await Random.threefry(device, seed, N);
+  const mappedRng = new Float32Array(N*4);
+  for (let i = 0; i < N*4; i++) {
+    mappedRng[i] = rng[i] / 0xFFFFFFFF;
+  }
+  const plotData = [{
+    x: mappedRng,
+    type: 'histogram',
+    xbins: {
+      start: 0,
+      end: 1,
+      size: (1 - 0) / 10
+    },
+    histnorm: 'probability'
+  }];
+
+  const layout = {
+    title: 'Histogram of Mapped RNG',
+    xaxis: { title: 'Value' },
+    yaxis: { title: 'Probability' },
+  };
+
+  Plotly.newPlot('test', plotData, layout).then((gd) => {
+    return Plotly.toImage(gd, { format: 'png', width: 800, height: 600 });
+  });
   // const N = 4096;
   // const K = 10;
   // const seedInit = Array.from({length: 4*N}, ()=>Math.floor(Math.random()*100000));
 
-  // const arr = new Float32Array(Array.from({length: 128*128*128}, (_, i) => i + 1));
-  // await Kernels.sum(device, arr);
+  // const M = 3;
+  // const N = 32*32*32;
+  // const arr = new Float32Array(Array.from({length: N*M}, (_, i) => 1));
+  // const segment_ids = new Uint32Array(Array.from({ length: N*M }, (_, i) => i % 2))
+  // const segment_ids = new Uint32Array(Array.from({ length: 96 }, (_, i) => 0))
+  // await Kernels.unsorted_segment_sum(device, arr, segment_ids, 2)
+  // await Kernels.sum_2d(device, arr, M, N);
 
-  const arr = new Float32Array(Array.from({length: 64}, (_, i) => i + 1));
-  const segment_ids = new Uint32Array(Array.from({ length: 64 }, (_, i) => i % 2))
-  await Kernels.unsorted_segment_sum(device, arr, segment_ids, 2)
+
 }
 
 type DPMM = {
