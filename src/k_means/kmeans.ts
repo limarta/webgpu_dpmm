@@ -36,11 +36,12 @@ export class Numericals {
     this.seedBuffer = seedBuffer;
     this.dataBuffer = dataBuffer;
     this.muDimsBuffer = GPUUtils.createUniform(device, new Uint32Array([this.K_max*this.F]));
-    this.muRandBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(this.K_max*this.F));
+    this.muRandBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(this.K_max*this.F*4));
     this.muBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.K_max*this.F));
 
     this.muRandShader = new Random.NormalShaderEncoder(
         device, 
+        this.K_max*this.F,
         this.seedBuffer, 
         this.muDimsBuffer, 
         this.muRandBuffer, 
@@ -118,11 +119,11 @@ export class KMeans {
 
     }
 
-    async step(device) {
-        const encoder = device.commandEncoder();
+    async step(device:GPUDevice) {
+        const encoder = device.createCommandEncoder();
         const pass = encoder.beginComputePass();
         this.numericals.encode_init(pass);
-        pass.endPass();
+        pass.end();
 
         device.queue.submit([encoder.finish()]);
     }

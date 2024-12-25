@@ -1,6 +1,6 @@
 @group(0) @binding(0) var<uniform> N: u32;
 @group(0) @binding(1) var<storage> rng: array<vec4u>;
-@group(0) @binding(2) var<storage, read_write> samples: array<vec2f>;
+@group(0) @binding(2) var<storage, read_write> samples: array<f32>;
 
 override nTPB: u32 = 16;
 const MAX: u32 = 0xFFFFFFFF;
@@ -20,7 +20,7 @@ fn boxmuller(
     let r: f32 = f32(u_0) / f32(MAX);
     let theta: f32 = f32(u_1) / f32(MAX) * 2.0 * 3.1415926535897932384626433832795;
     let x: f32 = sqrt(-2.0 * log(r)) * cos(theta);
-    let y: f32 = sqrt(-2.0 * log(r)) * sin(theta);
+    // let y: f32 = sqrt(-2.0 * log(r)) * sin(theta);
 
-    samples[idx] = vec2<f32>(x, y);
+    samples[idx] = x;
 }

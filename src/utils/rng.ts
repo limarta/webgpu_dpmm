@@ -8,6 +8,8 @@ interface ShaderEncoder {
 }
 
 export class NormalShaderEncoder implements ShaderEncoder {
+    length: number;
+    nTPB: number = 16;
     bindGroupLayout_1: GPUBindGroupLayout;
     bindGroup_1: GPUBindGroup;
     pipeline_1: GPUComputePipeline;
@@ -15,7 +17,17 @@ export class NormalShaderEncoder implements ShaderEncoder {
     bindGroup_2: GPUBindGroup;
     pipeline_2: GPUComputePipeline;
 
-    constructor(device:GPUDevice, seedBuffer:GPUBuffer, nBuffer:GPUBuffer, rngBuffer:GPUBuffer, outputBuffer:GPUBuffer) {
+    constructor(device:GPUDevice, length: number, seedBuffer:GPUBuffer, nBuffer:GPUBuffer, rngBuffer:GPUBuffer, outputBuffer:GPUBuffer) {
+        if ((rngBuffer.size/4) % 4 != 0) {
+            throw new Error(`rngBuffer size must be a multiple of 4, but got ${rngBuffer.size / 4}`);
+        }
+
+        if (length != rngBuffer.size/16) {
+            throw new Error(`length must be equal to rngBuffer size / 4, but got ${length} and ${rngBuffer.size / 4}`);
+        }
+
+        this.length = length;
+
         this.bindGroupLayout_1 = device.createBindGroupLayout({
             label: "ThreeFry BGL",
             entries: [
@@ -156,14 +168,15 @@ export class NormalShaderEncoder implements ShaderEncoder {
 
     }
 
+    // BUG: If 2^n +2, then last two entries are 0???
     encode(pass:GPUComputePassEncoder) {
         pass.setPipeline(this.pipeline_1);
         pass.setBindGroup(0, this.bindGroup_1);
-        pass.dispatchWorkgroups(1,1,1);
+        pass.dispatchWorkgroups(Math.ceil(this.length/this.nTPB),1,1);
 
         pass.setPipeline(this.pipeline_2);
         pass.setBindGroup(0, this.bindGroup_2);
-        pass.dispatchWorkgroups(1,1,1);
+        pass.dispatchWorkgroups(Math.ceil(this.length/this.nTPB),1,1);
     }
 }
 

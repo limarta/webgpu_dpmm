@@ -16,7 +16,9 @@ export default async function init(
   const K = 10;
   const kmeans = new DPMM.KMeans(K);
   await kmeans.setup(device);
-  // kmeans.step();
+  kmeans.step(device);
+  // GPUUtils.log(device, kmeans.numericals.muRandBuffer, true)
+  GPUUtils.log(device, kmeans.numericals.muBuffer, false)
 
   // const plotData = [{
   //   x: samples,
