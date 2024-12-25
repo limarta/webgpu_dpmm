@@ -1,5 +1,5 @@
 import './style.css'
-import init from './dpmm';
+import init from './entry';
 import { assert } from './utils/util';
 
 async function initializeWebGPU() {

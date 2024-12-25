@@ -1,348 +1,173 @@
-import ThreeFryCode from '../shaders/distributions/threefry.wgsl';
-import UniformCode from '../shaders/distributions/uniform.wgsl';
-import BoxMullerCode from '../shaders/distributions/boxmuller.wgsl';
-import { GPUUtils } from "./gpu";
+import ThreeFryCode from '../shaders/rng/threefry.wgsl';
+import BoxMullerCode from '../shaders/rng/boxmuller.wgsl';
 
 namespace Random {
-export async function prng(device: GPUDevice, seed: Uint32Array, N: number) {
-    const seedBuffer = GPUUtils.createUniform(device, seed);
-    const nBuffer = GPUUtils.createUniform(device, new Uint32Array([N]));
-    const rngBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(N*4));
-    threefry(device, seedBuffer, nBuffer, rngBuffer, N);    
 
-    const encoder = device.createCommandEncoder();
-
-    const cpuBuffer = device.createBuffer({
-        size: N*4*4,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-
-    encoder.copyBufferToBuffer(
-        rngBuffer, 0,
-        cpuBuffer, 0,
-        N*4*4
-    );
-
-    const commands = encoder.finish();
-
-    device.queue.submit([commands]);
-
-    await cpuBuffer.mapAsync(GPUMapMode.READ);
-    const ans = new Uint32Array(cpuBuffer.getMappedRange())
-    const result = new Uint32Array(ans);
-    cpuBuffer.unmap();
-    return result;
+interface ShaderEncoder {
+    encode(pass:GPUComputePassEncoder):void;
 }
 
-export async function threefry(device: GPUDevice, seedBuffer:GPUBuffer, nBuffer:GPUBuffer, rngBuffer:GPUBuffer, N: number) {
-    const bindGroupLayout = device.createBindGroupLayout({
-        entries: [
-            {
-                binding: 0,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "uniform"
+export class NormalShaderEncoder implements ShaderEncoder {
+    bindGroupLayout_1: GPUBindGroupLayout;
+    bindGroup_1: GPUBindGroup;
+    pipeline_1: GPUComputePipeline;
+    bindGroupLayout_2: GPUBindGroupLayout;
+    bindGroup_2: GPUBindGroup;
+    pipeline_2: GPUComputePipeline;
+
+    constructor(device:GPUDevice, seedBuffer:GPUBuffer, nBuffer:GPUBuffer, rngBuffer:GPUBuffer, outputBuffer:GPUBuffer) {
+        this.bindGroupLayout_1 = device.createBindGroupLayout({
+            label: "ThreeFry BGL",
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'uniform'
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'uniform'
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'storage'
+                    }
                 }
-            },
-            {
-                binding: 1,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "uniform"
+            ]
+        });
+
+        this.bindGroup_1 = device.createBindGroup({
+            layout: this.bindGroupLayout_1,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: seedBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: nBuffer
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: rngBuffer
+                    }
                 }
-            },
-            {
-                binding: 2,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "storage"
+            ]
+        });
+
+        const pipelineLayout_1 = device.createPipelineLayout({
+            bindGroupLayouts: [this.bindGroupLayout_1]
+        });
+
+        const threeFryShader = device.createShaderModule({
+            code: ThreeFryCode
+        })
+        this.pipeline_1 = device.createComputePipeline({
+            layout: pipelineLayout_1,
+            compute: {
+                module: threeFryShader,
+                entryPoint: "threefry",
+                constants: {
+                    nTPB: 16,
                 }
-            }
-        ]
-    });
+            } 
+        })
 
-    const bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: seedBuffer 
+        this.bindGroupLayout_2 = device.createBindGroupLayout({
+            label: "BoxMuller BGL",
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'uniform'
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'read-only-storage'
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'storage'
+                    }
                 }
-            },
-            {
-                binding: 1,
-                resource: {
-                    buffer: nBuffer 
+            ]
+        });
+
+        this.bindGroup_2 = device.createBindGroup({
+            layout: this.bindGroupLayout_2,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: nBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: rngBuffer
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: outputBuffer
+                    }
                 }
-            },
-            {
-                binding: 2,
-                resource: {
-                    buffer: rngBuffer 
+            ]
+        });
+
+        const pipelineLayout_2 = device.createPipelineLayout({
+            bindGroupLayouts: [this.bindGroupLayout_2]
+        });
+
+        const boxMullerShader = device.createShaderModule({
+            code: BoxMullerCode
+        })
+        this.pipeline_2 = device.createComputePipeline({
+            layout: pipelineLayout_2,
+            compute: {
+                module: boxMullerShader,
+                entryPoint: "boxmuller",
+                constants: {
+                    nTPB: 16,
                 }
-            }
-        ]
-    });
+            } 
+        });
 
-    const pipelineLayout = device.createPipelineLayout({
-        bindGroupLayouts: [bindGroupLayout]
-    });
+    }
 
-    const shaderModule = device.createShaderModule({
-        code: ThreeFryCode
-    });
+    encode(pass:GPUComputePassEncoder) {
+        pass.setPipeline(this.pipeline_1);
+        pass.setBindGroup(0, this.bindGroup_1);
+        pass.dispatchWorkgroups(1,1,1);
 
-    const pipeline = device.createComputePipeline({
-        layout: pipelineLayout,
-        compute: {
-            module: shaderModule,
-            entryPoint: "threefry",
-        }
-    });
-
-    const encoder = device.createCommandEncoder();
-
-    const pass = encoder.beginComputePass()
-
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
-    let N_workgroups = Math.ceil(N/16);
-    pass.dispatchWorkgroups(N_workgroups,1,1);
-
-    pass.end();
-    const commands = encoder.finish();
-
-    device.queue.submit([commands]);
+        pass.setPipeline(this.pipeline_2);
+        pass.setBindGroup(0, this.bindGroup_2);
+        pass.dispatchWorkgroups(1,1,1);
+    }
 }
 
-async function boxmuller(device:GPUDevice, rngBuffer:GPUBuffer, nBuffer:GPUBuffer, samplesBuffer:GPUBuffer, N:number) {
-    const bindGroupLayout = device.createBindGroupLayout({
-        entries: [
-            {
-                binding: 0,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "uniform"
-                }
-            },
-            {
-                binding: 1,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "read-only-storage"
-                }
-            },
-            {
-                binding: 2,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "storage"
-                }
-            }
-        ]
-    });
 
-    const bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: nBuffer 
-                }
-            },
-            {
-                binding: 1,
-                resource: {
-                    buffer: rngBuffer 
-                }
-            },
-            {
-                binding: 2,
-                resource: {
-                    buffer: samplesBuffer 
-                }
-            }
-        ]
-    });
-    const pipelineLayout = device.createPipelineLayout({
-        bindGroupLayouts: [bindGroupLayout]
-    });
-
-    const shaderModule = device.createShaderModule({
-        code: BoxMullerCode
-    });
-
-    const pipeline = device.createComputePipeline({
-        layout: pipelineLayout,
-        compute: {
-            module: shaderModule,
-            entryPoint: "boxmuller",
-        }
-    });
-
-    const encoder = device.createCommandEncoder();
-
-    const pass = encoder.beginComputePass()
-
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
-    let N_workgroups = Math.ceil(N/16);
-    pass.dispatchWorkgroups(N_workgroups,1,1);
-
-    pass.end();
-    const commands = encoder.finish();
-
-    device.queue.submit([commands]);
-}
-
-export async function normal(device: GPUDevice, seed: Uint32Array, N: number) {
-    const seedBuffer = GPUUtils.createUniform(device, seed);
-    const nBuffer = GPUUtils.createUniform(device, new Uint32Array([N]));
-    const rngBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(N*4));
-    const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*2));
-    threefry(device, seedBuffer, nBuffer, rngBuffer, N);    
-    boxmuller(device, rngBuffer, nBuffer, outputBuffer, N)
-
-    const encoder = device.createCommandEncoder();
-
-    const cpuBuffer = device.createBuffer({
-        size: N*2*4,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-
-    encoder.copyBufferToBuffer(
-        outputBuffer, 0,
-        cpuBuffer, 0,
-        N*2*4
-    );
-
-    const commands = encoder.finish();
-
-    device.queue.submit([commands]);
-
-    await cpuBuffer.mapAsync(GPUMapMode.READ);
-    const ans = new Float32Array(cpuBuffer.getMappedRange())
-    const result = new Float32Array(ans);
-    console.log(result)
-    cpuBuffer.unmap();
-    return result;
-}
-
-async function uniform_(device:GPUDevice, rngBuffer:GPUBuffer, nBuffer:GPUBuffer, samplesBuffer:GPUBuffer, N:number) {
-    const bindGroupLayout = device.createBindGroupLayout({
-        entries: [
-            {
-                binding: 0,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "uniform"
-                }
-            },
-            {
-                binding: 1,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "read-only-storage"
-                }
-            },
-            {
-                binding: 2,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: "storage"
-                }
-            }
-        ]
-    });
-
-    const bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: nBuffer 
-                }
-            },
-            {
-                binding: 1,
-                resource: {
-                    buffer: rngBuffer 
-                }
-            },
-            {
-                binding: 2,
-                resource: {
-                    buffer: samplesBuffer 
-                }
-            }
-        ]
-    });
-    const pipelineLayout = device.createPipelineLayout({
-        bindGroupLayouts: [bindGroupLayout]
-    });
-
-    const shaderModule = device.createShaderModule({
-        code: UniformCode
-    });
-
-    const pipeline = device.createComputePipeline({
-        layout: pipelineLayout,
-        compute: {
-            module: shaderModule,
-            entryPoint: "uni",
-        }
-    });
-
-    const encoder = device.createCommandEncoder();
-
-    const pass = encoder.beginComputePass()
-
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
-    let N_workgroups = Math.ceil(N/16);
-    pass.dispatchWorkgroups(N_workgroups,1,1);
-
-    pass.end();
-    const commands = encoder.finish();
-
-    device.queue.submit([commands]);
-}
-
-export async function uniform(device:GPUDevice, seed: Uint32Array, N:number) {
-    const seedBuffer = GPUUtils.createUniform(device, seed);
-    const nBuffer = GPUUtils.createUniform(device, new Uint32Array([N]));
-    const rngBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(N*4));
-    const samplesBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*4));
-    threefry(device, seedBuffer, nBuffer, rngBuffer, N);    
-    uniform_(device, rngBuffer, nBuffer, samplesBuffer, N);
-
-    const encoder = device.createCommandEncoder();
-
-    const cpuBuffer = device.createBuffer({
-        size: N*4*4,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-
-    encoder.copyBufferToBuffer(
-        samplesBuffer, 0,
-        cpuBuffer, 0,
-        N*4*4
-    );
-
-    const commands = encoder.finish();
-
-    device.queue.submit([commands]);
-
-    await cpuBuffer.mapAsync(GPUMapMode.READ);
-    const ans = new Float32Array(cpuBuffer.getMappedRange())
-    const result = new Float32Array(ans);
-    cpuBuffer.unmap();
-    cpuBuffer.destroy();
-    return result;
-}
 }
 
 export {Random};

@@ -1,7 +1,6 @@
 @group(0) @binding(0) var<uniform> dims: vec2<u32>;
 @group(0) @binding(1) var<storage> input: array<f32>;
 @group(0) @binding(2) var<storage, read_write> output: array<f32>;
-// @group(0) @binding(3) var<storage, read_write> sum: array<f32>;
 
 override nTPB:u32 = 32;
 override TMP_LEN:u32 = nTPB;

@@ -10,7 +10,6 @@ const R: u32 = 12;
 @compute @workgroup_size(nTPB,1,1)
 fn threefry(
     @builtin(global_invocation_id) global_invocation_id:vec3<u32>,
-    @builtin(workgroup_id) workgroup_id: vec3<u32>,
 ){
     let id = global_invocation_id.x;
     if (id < N) {
