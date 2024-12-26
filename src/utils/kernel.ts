@@ -1,5 +1,5 @@
 import {GPUUtils} from './gpu'
-import SumKernelCode from '../shaders/algebra/sum.wgsl'
+import SumKernelCode from '../shaders/algebra/sum_1d.wgsl'
 import UnsortedSegmentSumCode from '../shaders/algebra/unsorted_segment_sum.wgsl'
 import Sum2DKernelCode from '../shaders/algebra/sum_2d.wgsl'
 import ThreeFryCode from '../shaders/rng/threefry.wgsl';

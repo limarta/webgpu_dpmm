@@ -17,6 +17,7 @@ export class Numericals {
   K_max: number // Maximum possible number of clusters on buffer
 
   muRandShader: Random.NormalShaderEncoder
+//   segmentedSum2DShader: SegementedSum2DShaderEncoder
   constructor(N: number, F: number, K:number, K_max: number) {
     if (K > K_max) {
         throw new Error(`K=${K} is greater than K_max=${K_max}`);
@@ -48,43 +49,20 @@ export class Numericals {
         this.muBuffer
     );
 
-    const UpdateMeanBindGroupLayout = device.createBindGroupLayout({
-        label: "RefineMean BGL",
-        entries: [
-            {
-                binding: 0, 
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: 'uniform'
-                }
-            },
-            {
-                binding: 1,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: 'storage'
-                }
-            },
-            {
-                binding: 2,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {
-                    type: 'storage'
-                }
-            }
-        ]
-    });
+    // this.segmentedSum2DShader = new SegementedSum2DShaderEncoder();
+
   }
 
   encode_init(pass:GPUComputePassEncoder) {
     this.muRandShader.encode(pass);
   }
 
-  encode_update_means(encoder:GPURenderPassEncoder) {
-
+  encode_update_means(pass:GPUComputePassEncoder) {
+    // this.segmentedSum2DShader.encode(pass);
+    // this.sum2DShader.encode(pass);
   }
 
-  encode_update_assignments(encoder:GPURenderPassEncoder) {
+  encode_update_assignments(pass:GPUComputePassEncoder) {
 
   }
 }

@@ -84,6 +84,6 @@ fn sum_2d_final(
     }
     
     if (thid == 0) {
-        // sum[idy] = temp[TMP_LEN-1];
+        sum[idy] = temp[TMP_LEN-1];
     }
 }
