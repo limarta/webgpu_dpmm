@@ -1,5 +1,6 @@
 import Sum2DCode from '../shaders/algebra/sum_2d.wgsl';
 import UnsortedSegmentSumCode from '../shaders/algebra/unsorted_segment_sum.wgsl';
+import UnsortedSegmentSum2DCode from '../shaders/algebra/unsorted_segment_sum2d.wgsl';
 import Sum3DCode from '../shaders/algebra/sum_3d.wgsl'
 import {ShaderEncoder} from './shader.ts';
 import {GPUUtils} from './gpu.ts'
@@ -59,7 +60,6 @@ export class Sum2DShader implements ShaderEncoder {
     }
 
     async setup(device:GPUDevice, inputBuffer:GPUBuffer, outputBuffer: GPUBuffer) {
-        console.log("M: ", this.M, "N: ", this.N)
         if (inputBuffer.size / 4 != this.M * this.N) {
             throw new Error(`inputBuffer size must be equal to M*N, but got ${inputBuffer.size / 4} and ${this.M * this.N}`);
         }
@@ -301,7 +301,6 @@ export class Sum2DShader implements ShaderEncoder {
         pass.dispatchWorkgroups(this.columnSizes[1], this.N);
 
         var lastBuffer = true;
-        console.log(this.columnSizes)
         for (let i = 1 ; i < this.columnSizes.length-1; i++) {
             let NUM_WORKGROUPS = this.columnSizes[i+1];
             if (i%2 == 1) {
@@ -354,7 +353,7 @@ export class UnsortedSegmentSumShader implements ShaderEncoder {
 
     isSetup: boolean = false;
 
-    static nTPB: number = 4;
+    static nTPB: number = 32;
 
     /**
      * 
@@ -770,7 +769,6 @@ export class Sum3DShader implements ShaderEncoder {
         pass.dispatchWorkgroups(this.columnSizes[1], this.N, this.K);
 
         var lastBuffer = true;
-        console.log(this.columnSizes)
         for (let i = 1 ; i < this.columnSizes.length-1; i++) {
             let NUM_WORKGROUPS = this.columnSizes[i+1];
             if (i%2 == 1) {
@@ -790,6 +788,158 @@ export class Sum3DShader implements ShaderEncoder {
         }
         pass.dispatchWorkgroups(1, this.N, this.K)
 
+    }
+}
+
+export class UnsortedSegmentSum2DShader implements ShaderEncoder {
+    M: number;
+    N: number;
+    num_segments: number;
+    M_intermediate: number;
+
+    dimsUniformBuffer:GPUBuffer;
+    segmentCountUniformBuffer: GPUBuffer;
+    inputBuffer: GPUBuffer;
+    outputBuffer: GPUBuffer;
+    segmentIdBuffer: GPUBuffer;
+    scratchBuffer: GPUBuffer;
+
+    bindGroup: GPUBindGroup;
+    pipeline: GPUComputePipeline;
+
+    sum3DShader: Sum3DShader;
+
+    isSetup: boolean = false;
+
+    static nTPB: number = 4;
+
+    /**
+     * feature contiguous (i.e. each data point has its attributes in contiguous memory)
+     * 
+     * @param M  - number of entries in the input array
+     * @param N  - number of entries in the input array
+     * @param num_segments - number of segments
+     */
+    constructor(M: number, N: number, num_segments: number) {
+        this.M = M;
+        this.N = N;
+        this.num_segments = num_segments;
+        this.M_intermediate = Math.ceil(M / UnsortedSegmentSum2DShader.nTPB);
+        this.sum3DShader = new Sum3DShader(this.M_intermediate, this.N, this.num_segments);
+    }
+
+    async setup(device: GPUDevice, inputBuffer: GPUBuffer, segmentIdBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
+        if (inputBuffer.size / 4 != this.M * this.N) {
+            throw new Error(`dataBuffer size must be equal to N, but got ${inputBuffer.size / 4} and ${this.M * this.N}`);
+        }
+
+        if (segmentIdBuffer.size /4 != this.M) {
+            throw new Error(`segmentIdBuffer size must be equal to M, but got ${segmentIdBuffer.size} and ${this.M}`);
+        }
+
+        if (outputBuffer.size/4 != this.N * this.num_segments) {
+            throw new Error(`outputBuffer size must be equal to num_segments, but got ${outputBuffer.size} and ${this.N * this.num_segments}`);
+        }
+
+        this.inputBuffer = inputBuffer;
+        this.segmentIdBuffer = segmentIdBuffer;
+        this.outputBuffer = outputBuffer;
+
+        this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M, this.N]));
+        this.scratchBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.M_intermediate * this.N * this.num_segments));
+
+        const bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "uniform"
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "storage"
+                    }
+                }
+            ]
+        });
+    
+        this.bindGroup = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimsUniformBuffer,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.inputBuffer,
+                    } 
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.segmentIdBuffer,
+                    } 
+                },
+                {
+                    binding: 3,
+                    resource: {
+                        buffer: this.scratchBuffer
+                    }
+                }
+            ]
+        });
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        });
+    
+        const computeShaderModule = device.createShaderModule({
+            code: UnsortedSegmentSum2DCode,
+        });
+        this.pipeline = device.createComputePipeline({
+            layout: pipelineLayout,
+            compute: {
+                module: computeShaderModule,
+                entryPoint: "main",
+                constants: {
+                    nTPB: UnsortedSegmentSum2DShader.nTPB,
+                }
+            },
+        });
+
+        await this.sum3DShader.setup(device, this.scratchBuffer, this.outputBuffer);
+        this.isSetup = true;
+    }
+
+    encode(pass:GPUComputePassEncoder) {
+        if (!this.isSetup) {
+            throw new Error("UnsortedSegmentSumShader is not setup");
+        }
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.bindGroup);
+        pass.dispatchWorkgroups(this.M_intermediate, this.N, this.num_segments);
+        this.sum3DShader.encode(pass);
     }
 }
 

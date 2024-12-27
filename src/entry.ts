@@ -14,23 +14,23 @@ export default async function init(
     alphaMode: 'opaque',
   });
 
-
-  let N = 16;
+  let M = 5;
+  let N = 4;
   let K = 2;
-  let data = new Float32Array(N);
-  for (let i = 0; i < N; i++) {
+  let data = new Float32Array(M*N);
+  for (let i = 0; i < M*N; i++) {
     data[i] = i+1;
   }
-  let segmentIds = new Uint32Array(N);
-  for (let i = 0; i < N; i++) {
+  let segmentIds = new Uint32Array(M);
+  for (let i = 0; i < M; i++) {
     segmentIds[i] = i % K;
   }
 
   const dataBuffer = GPUUtils.createStorageBuffer(device, data);
   const segmentIdsBuffer = GPUUtils.createStorageBuffer(device, segmentIds);
-  const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(K));
+  const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*K));
 
-  const segmentedShader = new Ops.UnsortedSegmentSumShader(N, K);
+  const segmentedShader = new Ops.UnsortedSegmentSum2DShader(M, N, K);
 
   await segmentedShader.setup(device, dataBuffer, segmentIdsBuffer, outputBuffer)
 
