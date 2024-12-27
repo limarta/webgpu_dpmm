@@ -1,5 +1,6 @@
 import Sum2DCode from '../shaders/algebra/sum_2d.wgsl';
 import UnsortedSegmentSumCode from '../shaders/algebra/unsorted_segment_sum.wgsl';
+import Sum3DCode from '../shaders/algebra/sum_3d.wgsl'
 import {ShaderEncoder} from './shader.ts';
 import {GPUUtils} from './gpu.ts'
 
@@ -338,25 +339,303 @@ export class Sum3DShader implements ShaderEncoder {
     M: number;
     N: number;
     K: number;
+    MAX_BLOCKS_X: number;
+    columnSizes: number[];
 
+    dimensionUniformBuffer: GPUBuffer;
     inputBuffer: GPUBuffer;
+    scratchBuffer_1: GPUBuffer;
+    scratchBuffer_2: GPUBuffer;
     outputBuffer: GPUBuffer;
+
+    bindGroup_0: GPUBindGroup; // input -> scratch_1
+    bindGroup_1: GPUBindGroup; // scratch_1 -> scratch_2
+    bindGroup_2: GPUBindGroup; // scratch_2 -> scratch_1
+    bindGroup_3: GPUBindGroup; // scratch_1 -> output
+    bindGroup_4: GPUBindGroup; // scratch_2 -> output
+    bindGroup_5: GPUBindGroup; // input -> output
+    pipeline: GPUComputePipeline;
+
+    shaderCode: GPUShaderModule
+
+    isSetup: boolean = false;
+
+    static nTPB: number = 4;
 
     constructor(M: number, N: number, K: number) {
         this.M = M;
         this.N = N;
         this.K = K;
+        this.MAX_BLOCKS_X = Math.ceil(M/Sum3DShader.nTPB)
+
+        this.columnSizes = [];
+        for(let size=M; size > 0; size = Math.floor(size/Sum3DShader.nTPB)){
+            this.columnSizes.push(size);
+        }
     }
 
     async setup(device: GPUDevice, inputBuffer: GPUBuffer, outputBuffer: GPUBuffer, axis: number=0) {
+        if (inputBuffer.size / 4 != this.M * this.N * this.K) {
+            throw new Error(`inputBuffer size must be equal to M*N*K, but got ${inputBuffer.size / 4} and ${this.M * this.N * this.K}`);
+        }
+
+        if (outputBuffer.size / 4 != this.N * this.K) {
+            throw new Error(`outputBuffer size must be equal to N*K, but got ${outputBuffer.size / 4} and ${this.N * this.K}`);
+        }
+
         this.inputBuffer = inputBuffer;
         this.outputBuffer = outputBuffer;
 
-        throw new Error("Method not implemented.");
+        this.dimensionUniformBuffer = device.createBuffer({
+            label: "dimension_uniform",
+            size: Sum2DShader.UNIFORM_STRIDE*5, // assumption: at most 5 reductions
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+
+        var width = this.M;
+        for(let i = 0 ; i < this.columnSizes.length; i++) {
+            device.queue.writeBuffer(this.dimensionUniformBuffer, i*Sum2DShader.UNIFORM_STRIDE, new Uint32Array([width, this.N, this.K]));
+            width = Math.floor(width / Sum3DShader.nTPB);
+        }
+
+        this.scratchBuffer_1 = GPUUtils.createStorageBuffer(device, new Float32Array(this.MAX_BLOCKS_X * this.N * this.K));
+        this.scratchBuffer_2 = GPUUtils.createStorageBuffer(device, new Float32Array(this.MAX_BLOCKS_X * this.N * this.K));
+
+        const bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "uniform",
+                        hasDynamicOffset: true,
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "storage"
+                    }
+                }
+            ]
+        })
+        this.bindGroup_0 = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimensionUniformBuffer,
+                        size: 12,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.inputBuffer,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.scratchBuffer_1,
+                    }
+                }
+            ]
+        });
+
+        this.bindGroup_1 = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimensionUniformBuffer,
+                        size: 12,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.scratchBuffer_1,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.scratchBuffer_2,
+                    }
+                }
+            ]
+        });
+
+        this.bindGroup_2 = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimensionUniformBuffer,
+                        size: 12,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.scratchBuffer_2,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.scratchBuffer_1,
+                    }
+                }
+            ]
+        });
+
+        this.bindGroup_3 = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimensionUniformBuffer,
+                        size: 12,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.scratchBuffer_1,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.outputBuffer,
+                    }
+                }
+            ]
+        });
+
+        this.bindGroup_4 = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimensionUniformBuffer,
+                        size: 12,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.scratchBuffer_2,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.outputBuffer,
+                    }
+                }
+            ]
+        });
+
+        this.bindGroup_5 = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimensionUniformBuffer,
+                        size: 12,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.inputBuffer,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.outputBuffer,
+                    }
+                }
+            ]
+        });
+
+        this.shaderCode = device.createShaderModule({
+            code: Sum3DCode
+        });
+
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        });
+
+        this.pipeline = device.createComputePipeline({
+            layout: pipelineLayout,
+            compute: {
+                module: this.shaderCode,
+                entryPoint: "sum3d",
+                constants: {
+                    nTPB: Sum3DShader.nTPB,
+                }
+            }
+        });
+
+        this.isSetup = true;
     }
     
     encode(pass:GPUComputePassEncoder) {
-        throw new Error("Method not implemented.");
+        if (!this.isSetup) {
+            throw new Error("Sum3DShader is not setup");
+        }
+
+        pass.setPipeline(this.pipeline);
+        if (this.M <= Sum3DShader.nTPB) {
+            pass.setBindGroup(0, this.bindGroup_5, [0]);
+            pass.dispatchWorkgroups(this.columnSizes[1],this.N, this.K);
+            return;
+        }
+
+        pass.setBindGroup(0, this.bindGroup_0, [0]);
+        pass.dispatchWorkgroups(this.columnSizes[1], this.N, this.K);
+
+
+        var lastBuffer = true;
+        for (let i = 1 ; i < this.columnSizes.length-1; i++) {
+            let width = this.columnSizes[i+1];
+            if (i%2 == 1) {
+                lastBuffer = false;
+                pass.setBindGroup(0, this.bindGroup_1, [i*Sum2DShader.UNIFORM_STRIDE]);
+                pass.dispatchWorkgroups(width, this.N, this.K);
+            } else {
+                lastBuffer = true;
+                pass.setBindGroup(0, this.bindGroup_2, [i*Sum2DShader.UNIFORM_STRIDE]);    
+                pass.dispatchWorkgroups(width, this.N, this.K);
+            }
+        }
+
+        if (lastBuffer) {
+            pass.setBindGroup(0, this.bindGroup_3, [(this.columnSizes.length-1)*Sum2DShader.UNIFORM_STRIDE]);
+        } else {
+            pass.setBindGroup(0, this.bindGroup_4, [(this.columnSizes.length-1)*Sum2DShader.UNIFORM_STRIDE]);
+        }
+        pass.dispatchWorkgroups(1, this.N, this.K)
+
     }
 }
 
