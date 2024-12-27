@@ -1,3 +1,4 @@
+import TransposeCode from '../shaders/algebra/transpose.wgsl';
 import MatVecElementwiseCode from '../shaders/algebra/mat_vec_elementwise.wgsl';
 import Sum2DCode from '../shaders/algebra/sum_2d.wgsl';
 import UnsortedSegmentSumCode from '../shaders/algebra/unsorted_segment_sum.wgsl';
@@ -14,6 +15,117 @@ enum OpType {
 }
 
 namespace Ops {
+
+export class TransposeShader implements ShaderEncoder {
+    M: number;
+    N: number;
+
+    dimsUniformBuffer: GPUBuffer
+    inputBuffer: GPUBuffer;
+    outputBuffer: GPUBuffer;
+
+    bindGroup: GPUBindGroup;
+    pipeline: GPUComputePipeline;
+    
+    isSetup: boolean = false;
+
+    static nTPB: number = 4;
+
+    constructor(M: number, N: number) {
+        this.M = M;
+        this.N = N;
+    }
+
+    async setup(device: GPUDevice, inputBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
+        if (inputBuffer.size / 4 != this.M * this.N) {
+            throw new Error(`inputBuffer size must be equal to M*N, but got ${inputBuffer.size / 4} and ${this.M * this.N}`);
+        }
+        if(inputBuffer.size != outputBuffer.size) {
+            throw new Error(`inputBuffer size must be equal to outputBuffer size, but got ${inputBuffer.size} and ${outputBuffer.size}`);
+        }
+
+        this.inputBuffer = inputBuffer;
+        this.outputBuffer = outputBuffer;
+        this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M, this.N]));
+        const bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding:0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "uniform"
+                    }
+                },
+                {
+                    binding:1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding:2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "storage"
+                    }
+                },
+            ]
+        });
+
+        this.bindGroup = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimsUniformBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.inputBuffer
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.outputBuffer
+                    }
+
+                }
+            ]
+        });
+
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        });
+
+        this.pipeline = device.createComputePipeline({
+            layout: pipelineLayout,
+            compute: {
+                module: device.createShaderModule({
+                    code: TransposeCode
+                }),
+                entryPoint: "transpose",
+                constants: {
+                    nTPB: TransposeShader.nTPB
+                }
+            }
+        })
+
+        this.isSetup = true;
+    }
+
+    encode(pass: GPUComputePassEncoder): void {
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.bindGroup);
+        let MAX_BLOCKS_X = Math.ceil(this.M/TransposeShader.nTPB);
+        let MAX_BLOCKS_Y = Math.ceil(this.N/TransposeShader.nTPB);
+        pass.dispatchWorkgroups(MAX_BLOCKS_X, MAX_BLOCKS_Y, 1)
+    }
+}
 
 /**
  * A shader to perform elementwise operations on a matrix and a vector.

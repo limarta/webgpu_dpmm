@@ -14,8 +14,8 @@ export default async function init(
     alphaMode: 'opaque',
   });
 
-  let M = 5;
-  let N = 4;
+  let M = 65;
+  let N = 6;
   let matrix = new Float32Array(M*N);
   for (let i = 0; i < M*N; i++) {
     matrix[i] = i+1;
@@ -29,8 +29,11 @@ export default async function init(
   const vectorBuffer = GPUUtils.createStorageBuffer(device, vector);
   const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M*N));
 
-  const shader = new Ops.MatVecElementwiseShader(M, N);
-  await shader.setup(device, matrixBuffer, vectorBuffer, outputBuffer);
+  // const shader = new Ops.MatVecElementwiseShader(M, N, 0);
+  // await shader.setup(device, matrixBuffer, vectorBuffer, outputBuffer);
+
+  const shader = new Ops.TransposeShader(M, N);
+  await shader.setup(device, matrixBuffer, outputBuffer);
 
   const encoder = device.createCommandEncoder();
   const pass = encoder.beginComputePass();
@@ -40,7 +43,7 @@ export default async function init(
   device.queue.submit([encoder.finish()]);
 
   GPUUtils.log(device, matrixBuffer, false);
-  GPUUtils.log(device, vectorBuffer, false);
+  // GPUUtils.log(device, vectorBuffer, false);
   GPUUtils.log(device, outputBuffer, false);
 
 
