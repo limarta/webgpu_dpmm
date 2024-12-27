@@ -15,40 +15,35 @@ export default async function init(
   });
 
 
-  let M = 63;
-  let N = 4; 
-  let K = 1;
-  const sumShader = new Ops.Sum3DShader(M,N,K)
-  const data = new Float32Array(M * N * K);
-  for (let i = 0; i < data.length; i++) {
+  let N = 16;
+  let K = 2;
+  let data = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
     data[i] = i+1;
   }
+  let segmentIds = new Uint32Array(N);
+  for (let i = 0; i < N; i++) {
+    segmentIds[i] = i % K;
+  }
 
+  const dataBuffer = GPUUtils.createStorageBuffer(device, data);
+  const segmentIdsBuffer = GPUUtils.createStorageBuffer(device, segmentIds);
+  const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(K));
 
-  const inputBuffer = device.createBuffer({
-    size: data.byteLength,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-  });
+  const segmentedShader = new Ops.UnsortedSegmentSumShader(N, K);
 
-  device.queue.writeBuffer(inputBuffer, 0, data);
-
-  const outputBuffer = device.createBuffer({
-    size: 4*N*K,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-  });
-
-  await sumShader.setup(device, inputBuffer, outputBuffer)
+  await segmentedShader.setup(device, dataBuffer, segmentIdsBuffer, outputBuffer)
 
   const encoder = device.createCommandEncoder();
   const pass = encoder.beginComputePass();
-  sumShader.encode(pass);
+  segmentedShader.encode(pass);
   pass.end();
   device.queue.submit([encoder.finish()]);
 
   // console.log("scratch 1:")
-  await GPUUtils.log(device, sumShader.scratchBuffer_1, false);
+  await GPUUtils.log(device, segmentedShader.scratchBuffer, false);
   // console.log("scratch 2:")
-  await GPUUtils.log(device, sumShader.scratchBuffer_2, false);
+  // await GPUUtils.log(device, sumShader.scratchBuffer_2, false);
   // console.log("output:")
   await GPUUtils.log(device, outputBuffer, false);
   // const K = 10;

@@ -2,7 +2,7 @@
 @group(0) @binding(1) var<storage> input: array<f32>;
 @group(0) @binding(2) var<storage, read_write> output: array<f32>;
 
-override nTPB:u32 = 4;
+override nTPB:u32 = 32;
 var<workgroup> temp: array<f32, nTPB>;
 
 @compute @workgroup_size(nTPB, 1, 1)
