@@ -16,36 +16,67 @@ export default async function init(
 
   let M = 5;
   let N = 4;
-  let K = 2;
-  let data = new Float32Array(M*N);
+  let matrix = new Float32Array(M*N);
   for (let i = 0; i < M*N; i++) {
-    data[i] = i+1;
+    matrix[i] = i+1;
   }
-  let segmentIds = new Uint32Array(M);
+  let vector = new Float32Array(M);
   for (let i = 0; i < M; i++) {
-    segmentIds[i] = i % K;
+    vector[i] = -i;
   }
 
-  const dataBuffer = GPUUtils.createStorageBuffer(device, data);
-  const segmentIdsBuffer = GPUUtils.createStorageBuffer(device, segmentIds);
-  const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*K));
+  const matrixBuffer = GPUUtils.createStorageBuffer(device, matrix);
+  const vectorBuffer = GPUUtils.createStorageBuffer(device, vector);
+  const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M*N));
 
-  const segmentedShader = new Ops.UnsortedSegmentSum2DShader(M, N, K);
-
-  await segmentedShader.setup(device, dataBuffer, segmentIdsBuffer, outputBuffer)
+  const shader = new Ops.MatVecElementwiseShader(M, N);
+  await shader.setup(device, matrixBuffer, vectorBuffer, outputBuffer);
 
   const encoder = device.createCommandEncoder();
   const pass = encoder.beginComputePass();
-  segmentedShader.encode(pass);
+
+  shader.encode(pass);
   pass.end();
   device.queue.submit([encoder.finish()]);
 
+  GPUUtils.log(device, matrixBuffer, false);
+  GPUUtils.log(device, vectorBuffer, false);
+  GPUUtils.log(device, outputBuffer, false);
+
+
+
+  // let M = 5;
+  // let N = 4;
+  // let K = 2;
+  // let data = new Float32Array(M*N);
+  // for (let i = 0; i < M*N; i++) {
+  //   data[i] = i+1;
+  // }
+  // let segmentIds = new Uint32Array(M);
+  // for (let i = 0; i < M; i++) {
+  //   segmentIds[i] = i % K;
+  // }
+
+  // const dataBuffer = GPUUtils.createStorageBuffer(device, data);
+  // const segmentIdsBuffer = GPUUtils.createStorageBuffer(device, segmentIds);
+  // const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*K));
+
+  // const segmentedShader = new Ops.UnsortedSegmentSum2DShader(M, N, K);
+
+  // await segmentedShader.setup(device, dataBuffer, segmentIdsBuffer, outputBuffer)
+
+  // const encoder = device.createCommandEncoder();
+  // const pass = encoder.beginComputePass();
+  // segmentedShader.encode(pass);
+  // pass.end();
+  // device.queue.submit([encoder.finish()]);
+
   // console.log("scratch 1:")
-  await GPUUtils.log(device, segmentedShader.scratchBuffer, false);
+  // await GPUUtils.log(device, segmentedShader.scratchBuffer, false);
   // console.log("scratch 2:")
   // await GPUUtils.log(device, sumShader.scratchBuffer_2, false);
   // console.log("output:")
-  await GPUUtils.log(device, outputBuffer, false);
+  // await GPUUtils.log(device, outputBuffer, false);
   // const K = 10;
   // const kmeans = new DPMM.KMeans(K);
   // await kmeans.setup(device);

@@ -1,3 +1,4 @@
+import MatVecElementwiseCode from '../shaders/algebra/mat_vec_elementwise.wgsl';
 import Sum2DCode from '../shaders/algebra/sum_2d.wgsl';
 import UnsortedSegmentSumCode from '../shaders/algebra/unsorted_segment_sum.wgsl';
 import UnsortedSegmentSum2DCode from '../shaders/algebra/unsorted_segment_sum2d.wgsl';
@@ -5,7 +6,155 @@ import Sum3DCode from '../shaders/algebra/sum_3d.wgsl'
 import {ShaderEncoder} from './shader.ts';
 import {GPUUtils} from './gpu.ts'
 
+enum OpType {
+    PLUS = 0,
+    MINUS = 1,
+    TIMES = 2,
+    DIVIDE = 3,
+}
+
 namespace Ops {
+
+/**
+ * A shader to perform elementwise operations on a matrix and a vector.
+ */
+export class MatVecElementwiseShader implements ShaderEncoder {
+    M: number;
+    N: number;
+    op: OpType;
+
+    dimsUniformBuffer: GPUBuffer;
+    matrixBuffer: GPUBuffer;
+    vectorBuffer: GPUBuffer;
+    outputBuffer: GPUBuffer;
+
+    bindGroup: GPUBindGroup;
+    pipeline: GPUComputePipeline;
+
+    isSetup:boolean = false;
+
+    static nTPB: number = 4;
+
+    constructor(M:number , N: number, op:OpType = OpType.PLUS) {
+        this.M = M;
+        this.N = N;
+        this.op = op;
+    }
+
+    async setup(device:GPUDevice, matrixBuffer:GPUBuffer, vectorBuffer:GPUBuffer, outputBuffer:GPUBuffer) {
+        if (matrixBuffer.size / 4 != this.M * this.N) {
+            throw new Error(`matrixBuffer size must be equal to M*N, but got ${matrixBuffer.size / 4} and ${this.M * this.N}`);
+        }
+        if(vectorBuffer.size / 4 != this.M) {
+            throw new Error(`vectorBuffer size must be equal to M, but got ${vectorBuffer.size / 4} and ${this.M}`);
+        }
+        if(outputBuffer.size /4 != this.M * this.N) {
+            throw new Error(`outputBuffer size must be equal to M*N, but got ${outputBuffer.size / 4} and ${this.M * this.N}`);
+        }
+
+        this.matrixBuffer = matrixBuffer;
+        this.vectorBuffer = vectorBuffer;
+        this.outputBuffer = outputBuffer;
+
+        this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M, this.N]));
+
+        const bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "uniform"
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "storage"
+                    }
+                }
+            ]
+        });
+
+        this.bindGroup = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimsUniformBuffer,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.matrixBuffer,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.vectorBuffer,
+                    }
+                },
+                {
+                    binding: 3,
+                    resource: {
+                        buffer: this.outputBuffer
+                    }
+                }
+            ]
+        });
+
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        });
+
+        const shaderCode = device.createShaderModule({
+            code: MatVecElementwiseCode
+        });
+
+        this.pipeline = device.createComputePipeline({
+            layout: pipelineLayout,
+            compute: {
+                module: shaderCode,
+                entryPoint: "main",
+                constants: {
+                    nTPB: MatVecElementwiseShader.nTPB,
+                    op: this.op
+                }
+            }
+        });
+
+        this.isSetup = true;
+
+    }
+
+    encode(pass:GPUComputePassEncoder): void {
+        if (!this.isSetup) {
+            throw new Error("MatVecElementwiseShader is not setup");
+        }
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.bindGroup);
+        pass.dispatchWorkgroups(Math.ceil(this.M * this.N / MatVecElementwiseShader.nTPB), 1);
+    }
+
+}
 
 export class Sum2DShader implements ShaderEncoder {
     M: number;
