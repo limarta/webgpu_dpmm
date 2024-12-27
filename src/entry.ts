@@ -15,28 +15,15 @@ export default async function init(
   });
 
 
-  let M = 4;
-  let N = 4;
-  let K = 4;
+  let M = 63;
+  let N = 4; 
+  let K = 1;
   const sumShader = new Ops.Sum3DShader(M,N,K)
-  const data = new Float32Array([
-    1, 1, 1, 1,
-    1, 1, 1, 1,
-    1, 1, 1, 1,
-    1, 1, 1, 1,
-    2, 2, 2, 2,
-    2, 2, 2, 2,
-    2, 2, 2, 2,
-    2, 2, 2, 2,
-    3, 3, 3, 3,
-    3, 3, 3, 3,
-    3, 3, 3, 3,
-    3, 3, 3, 3,
-    4, 4, 4, 4,
-    4, 4, 4, 4,
-    4, 4, 4, 4,
-    4, 4, 4, 4,
-  ]);
+  const data = new Float32Array(M * N * K);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = i+1;
+  }
+
 
   const inputBuffer = device.createBuffer({
     size: data.byteLength,
@@ -58,9 +45,12 @@ export default async function init(
   pass.end();
   device.queue.submit([encoder.finish()]);
 
-  GPUUtils.log(device, inputBuffer, false);
-  GPUUtils.log(device, outputBuffer, false);
-  GPUUtils.log(device, sumShader.scratchBuffer_1, false);
+  // console.log("scratch 1:")
+  await GPUUtils.log(device, sumShader.scratchBuffer_1, false);
+  // console.log("scratch 2:")
+  await GPUUtils.log(device, sumShader.scratchBuffer_2, false);
+  // console.log("output:")
+  await GPUUtils.log(device, outputBuffer, false);
   // const K = 10;
   // const kmeans = new DPMM.KMeans(K);
   // await kmeans.setup(device);

@@ -369,8 +369,11 @@ export class Sum3DShader implements ShaderEncoder {
         this.MAX_BLOCKS_X = Math.ceil(M/Sum3DShader.nTPB)
 
         this.columnSizes = [];
-        for(let size=M; size > 0; size = Math.floor(size/Sum3DShader.nTPB)){
+        for(let size=M; size > 0; size = Math.ceil(size/Sum3DShader.nTPB)){
             this.columnSizes.push(size);
+            if (size == 1) {
+                break;
+            }
         }
     }
 
@@ -389,13 +392,14 @@ export class Sum3DShader implements ShaderEncoder {
         this.dimensionUniformBuffer = device.createBuffer({
             label: "dimension_uniform",
             size: Sum2DShader.UNIFORM_STRIDE*5, // assumption: at most 5 reductions
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
         });
+
 
         var width = this.M;
         for(let i = 0 ; i < this.columnSizes.length; i++) {
             device.queue.writeBuffer(this.dimensionUniformBuffer, i*Sum2DShader.UNIFORM_STRIDE, new Uint32Array([width, this.N, this.K]));
-            width = Math.floor(width / Sum3DShader.nTPB);
+            width = Math.ceil(width / Sum3DShader.nTPB);
         }
 
         this.scratchBuffer_1 = GPUUtils.createStorageBuffer(device, new Float32Array(this.MAX_BLOCKS_X * this.N * this.K));
@@ -607,26 +611,28 @@ export class Sum3DShader implements ShaderEncoder {
         pass.setPipeline(this.pipeline);
         if (this.M <= Sum3DShader.nTPB) {
             pass.setBindGroup(0, this.bindGroup_5, [0]);
-            pass.dispatchWorkgroups(this.columnSizes[1],this.N, this.K);
+            pass.dispatchWorkgroups(1,this.N, this.K);
             return;
         }
 
         pass.setBindGroup(0, this.bindGroup_0, [0]);
         pass.dispatchWorkgroups(this.columnSizes[1], this.N, this.K);
 
-
         var lastBuffer = true;
+        console.log(this.columnSizes)
         for (let i = 1 ; i < this.columnSizes.length-1; i++) {
-            let width = this.columnSizes[i+1];
+            let NUM_WORKGROUPS = this.columnSizes[i+1];
+            console.log("Width ", NUM_WORKGROUPS)
             if (i%2 == 1) {
+                console.log("I")
                 lastBuffer = false;
                 pass.setBindGroup(0, this.bindGroup_1, [i*Sum2DShader.UNIFORM_STRIDE]);
-                pass.dispatchWorkgroups(width, this.N, this.K);
             } else {
+                console.log("J")
                 lastBuffer = true;
                 pass.setBindGroup(0, this.bindGroup_2, [i*Sum2DShader.UNIFORM_STRIDE]);    
-                pass.dispatchWorkgroups(width, this.N, this.K);
             }
+            pass.dispatchWorkgroups(NUM_WORKGROUPS, this.N, this.K);
         }
 
         if (lastBuffer) {
