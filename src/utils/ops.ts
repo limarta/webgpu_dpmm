@@ -1052,6 +1052,12 @@ export class Sum3DShader implements ShaderEncoder {
     }
 }
 
+/**
+ * Sums tensors sharing the same segment ids.
+ * 
+ * Given an (M,N) matrix and segment id array of length M, this shader returns a new
+ * tensor of size K*N. 
+ */
 export class UnsortedSegmentSum2DShader implements ShaderEncoder {
     M: number;
     N: number;
@@ -1075,11 +1081,11 @@ export class UnsortedSegmentSum2DShader implements ShaderEncoder {
     static nTPB: number = 4;
 
     /**
-     * feature contiguous (i.e. each data point has its attributes in contiguous memory)
      * 
-     * @param M  - number of entries in the input array
-     * @param N  - number of entries in the input array
-     * @param num_segments - number of segments
+     * @param M  - dimension one
+     * @param N  - dimension two
+     * @param num_segments - maximum number of unique segment ids.
+     * 
      */
     constructor(M: number, N: number, num_segments: number) {
         this.M = M;

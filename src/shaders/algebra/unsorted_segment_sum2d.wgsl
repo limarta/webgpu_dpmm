@@ -18,6 +18,7 @@ fn main(
 
     let GRID_STRIDE: u32 = num_workgroups.x * nTPB;
     let MAX_BLOCKS_X:u32 = (DIMX+nTPB-1) / nTPB;
+    let K: u32 = num_workgroups.z;
 
     var thid:u32 = local_invocation_id.x;
     var idx:u32 = thid + workgroup_id.x * nTPB;
@@ -27,8 +28,7 @@ fn main(
     var val:f32 = 0.0;
     while (idx < DIMX) {
         var gThid:u32 = idx + idy * DIMX;
-        var gThid2:u32 = idx;
-        val += select(0.0, data[gThid], segments_ids[gThid2] == idk);
+        val += select(0.0, data[gThid], segments_ids[idx] == idk);
         idx += GRID_STRIDE;
     }
     temp[thid] = val;
@@ -48,7 +48,7 @@ fn main(
     }
 
     if (thid == 0) {
-        let index = workgroup_id.x + idy * MAX_BLOCKS_X + idk * MAX_BLOCKS_X * DIMY;
+        let index = workgroup_id.x + idk * MAX_BLOCKS_X + idy * MAX_BLOCKS_X*K;
         output[index] = temp[nTPB-1];
     }
 }

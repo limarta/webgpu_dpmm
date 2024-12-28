@@ -14,37 +14,43 @@ export default async function init(
     alphaMode: 'opaque',
   });
 
-  let M = 65;
-  let N = 6;
-  let matrix = new Float32Array(M*N);
-  for (let i = 0; i < M*N; i++) {
-    matrix[i] = i+1;
-  }
-  let vector = new Float32Array(M);
+  let M = 4;
+  let N = 3;
+  let K = 3;
+  let data = new Float32Array([
+    100, 100, 100, 100,
+    2, 2, 2, 2,
+    -1, -1, -1, -1,
+  ]);
+
+  let segmentIds = new Uint32Array(M);
   for (let i = 0; i < M; i++) {
-    vector[i] = -i;
+    segmentIds[i] = i % K;
   }
 
-  const matrixBuffer = GPUUtils.createStorageBuffer(device, matrix);
-  const vectorBuffer = GPUUtils.createStorageBuffer(device, vector);
-  const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M*N));
+  const dataBuffer = GPUUtils.createStorageBuffer(device, data);
+  const segmentIdsBuffer = GPUUtils.createStorageBuffer(device, segmentIds);
+  const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*K));
+  const outputBuffer2 = GPUUtils.createStorageBuffer(device, new Float32Array(N*K));
 
-  // const shader = new Ops.MatVecElementwiseShader(M, N, 0);
-  // await shader.setup(device, matrixBuffer, vectorBuffer, outputBuffer);
+  const shader1 = new Ops.UnsortedSegmentSum2DShader(M, N, K);
+  const shader2 = new Ops.TransposeShader(K, N)
 
-  const shader = new Ops.TransposeShader(M, N);
-  await shader.setup(device, matrixBuffer, outputBuffer);
+  await shader1.setup(device, dataBuffer, segmentIdsBuffer, outputBuffer);
+  await shader2.setup(device, outputBuffer, outputBuffer2)
 
   const encoder = device.createCommandEncoder();
   const pass = encoder.beginComputePass();
 
-  shader.encode(pass);
+  shader1.encode(pass);
+  // shader2.encode(pass);
   pass.end();
   device.queue.submit([encoder.finish()]);
 
-  GPUUtils.log(device, matrixBuffer, false);
-  // GPUUtils.log(device, vectorBuffer, false);
+  GPUUtils.log(device, dataBuffer, false);
+  GPUUtils.log(device, segmentIdsBuffer, true);
   GPUUtils.log(device, outputBuffer, false);
+  // GPUUtils.log(device, outputBuffer2, false);
 
 
 
