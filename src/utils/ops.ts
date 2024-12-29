@@ -145,7 +145,7 @@ export class MatVecElementwiseShader implements ShaderEncoder {
 
     isSetup:boolean = false;
 
-    static nTPB: number = 4;
+    static nTPB: number = 32;
 
     constructor(M:number , N: number, op:OpType = OpType.PLUS) {
         this.M = M;
@@ -158,7 +158,7 @@ export class MatVecElementwiseShader implements ShaderEncoder {
             throw new Error(`matrixBuffer size must be equal to M*N, but got ${matrixBuffer.size / 4} and ${this.M * this.N}`);
         }
         if(vectorBuffer.size / 4 != this.M) {
-            throw new Error(`vectorBuffer size must be equal to M, but got ${vectorBuffer.size / 4} and ${this.M}`);
+            throw new Error(`vectorBuffer size must be equal to ${this.M}, but got ${vectorBuffer.size / 4}`);
         }
         if(outputBuffer.size /4 != this.M * this.N) {
             throw new Error(`outputBuffer size must be equal to M*N, but got ${outputBuffer.size / 4} and ${this.M * this.N}`);
@@ -771,7 +771,7 @@ export class Sum3DShader implements ShaderEncoder {
     isSetup: boolean = false;
 
     static UNIFORM_STRIDE = 256;
-    static nTPB: number = 32;
+    static nTPB: number = 64;
 
     constructor(M: number, N: number, K: number) {
         this.M = M;
@@ -1078,7 +1078,7 @@ export class UnsortedSegmentSum2DShader implements ShaderEncoder {
 
     isSetup: boolean = false;
 
-    static nTPB: number = 4;
+    static nTPB: number = 64;
 
     /**
      * 
@@ -1207,6 +1207,43 @@ export class UnsortedSegmentSum2DShader implements ShaderEncoder {
         pass.setBindGroup(0, this.bindGroup);
         pass.dispatchWorkgroups(this.M_intermediate, this.N, this.num_segments);
         this.sum3DShader.encode(pass);
+    }
+}
+
+export class CountShader implements ShaderEncoder {
+    M: number
+    K: number
+
+    inputBuffer: GPUBuffer
+    onesBuffer: GPUBuffer
+    dimsUniformBuffer
+    outputBuffer: GPUBuffer
+
+    unsortedSegmentSumShader: UnsortedSegmentSumShader
+
+    constructor(M: number, K: number) {
+        this.M = M;
+        this.K = K;
+
+        this.unsortedSegmentSumShader = new UnsortedSegmentSumShader(M, K)
+    }
+
+    async setup(device: GPUDevice, inputBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
+        this.inputBuffer = inputBuffer;
+        this.outputBuffer = outputBuffer;
+
+        let ones_arr = new Float32Array(this.M);
+        for(let i = 0 ; i < this.M ; i++) {
+            ones_arr[i] = 1;
+        }
+        this.onesBuffer = GPUUtils.createStorageBuffer(device, ones_arr);
+        this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M]));
+
+        await this.unsortedSegmentSumShader.setup(device, this.onesBuffer, inputBuffer, outputBuffer);
+    }
+
+    encode(pass:GPUComputePassEncoder) {
+        this.unsortedSegmentSumShader.encode(pass);
     }
 }
 
