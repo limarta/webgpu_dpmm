@@ -4,6 +4,7 @@ import Sum2DCode from '../shaders/algebra/sum_2d.wgsl';
 import UnsortedSegmentSumCode from '../shaders/algebra/unsorted_segment_sum.wgsl';
 import UnsortedSegmentSum2DCode from '../shaders/algebra/unsorted_segment_sum2d.wgsl';
 import Sum3DCode from '../shaders/algebra/sum_3d.wgsl'
+import ClosestPairwiseLoopCode from '../shaders/algebra/closest_pairwise_loop.wgsl'
 import {ShaderEncoder} from './shader.ts';
 import {GPUUtils} from './gpu.ts'
 
@@ -1221,6 +1222,8 @@ export class CountShader implements ShaderEncoder {
 
     unsortedSegmentSumShader: UnsortedSegmentSumShader
 
+    isSetup: boolean = false
+
     constructor(M: number, K: number) {
         this.M = M;
         this.K = K;
@@ -1240,10 +1243,156 @@ export class CountShader implements ShaderEncoder {
         this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M]));
 
         await this.unsortedSegmentSumShader.setup(device, this.onesBuffer, inputBuffer, outputBuffer);
+        this.isSetup = true;
     }
 
     encode(pass:GPUComputePassEncoder) {
+        if (!this.isSetup) {
+            throw new Error("CountShader is not setup");
+        }
         this.unsortedSegmentSumShader.encode(pass);
+    }
+}
+
+export class ClosestPairwiseLoopShader implements ShaderEncoder {
+    M_1: number;
+    M_2: number;
+    K: number;
+    MAX_BLOCKS_X: number
+
+    buffer1: GPUBuffer
+    buffer2: GPUBuffer
+    outputBuffer: GPUBuffer
+    dimensionUniformBuffer: GPUBuffer
+
+    bindGroup: GPUBindGroup
+    pipeline: GPUComputePipeline
+
+    isSetup: boolean = false
+
+    static nTPBx:number = 32;
+    static nTPBy:number = 1;
+    static nTPBz:number = 1;
+
+    constructor(M_1: number, M_2: number, K: number) {
+        this.M_1 = M_1;
+        this.M_2 = M_2;
+        this.K = K;
+
+        this.MAX_BLOCKS_X = Math.ceil(M_1/ClosestPairwiseLoopShader.nTPBx)
+    }
+
+    async setup(device: GPUDevice, inputBuffer_1:GPUBuffer, inputBuffer_2:GPUBuffer, outputBuffer:GPUBuffer) {
+        if (inputBuffer_1.size / 4 != this.M_1 * this.K) {
+            throw new Error(`inputBuffer_1 size must be equal to ${this.M_1}, but got ${inputBuffer_1.size / 4}`);
+        }
+
+        if (inputBuffer_2.size / 4 != this.M_2 * this.K) {
+            throw new Error(`inputBuffer_2 size must be equal to ${this.M_2}, but got ${inputBuffer_2.size / 4}`);
+        }
+
+        if (outputBuffer.size / 4 != this.M_1) {
+            throw new Error(`outputBuffer size must be equal to ${this.M_1}, but got ${outputBuffer.size / 4}`);
+        }
+
+        this.buffer1 = inputBuffer_1;
+        this.buffer2 = inputBuffer_2;
+        this.outputBuffer = outputBuffer;
+        this.dimensionUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M_1, this.M_2, this.K]));
+
+        const bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "uniform"
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "storage"
+                    }
+                }
+            ]
+        })
+        this.bindGroup = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimensionUniformBuffer,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.buffer1,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.buffer2,
+                    }
+                },
+                {
+                    binding: 3,
+                    resource: {
+                        buffer: this.outputBuffer
+                    }
+                }
+            ]
+        });
+
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        });
+        const shaderCode = device.createShaderModule({
+            code: ClosestPairwiseLoopCode
+        });
+
+        console.log(ClosestPairwiseLoopShader.nTPBx, ClosestPairwiseLoopShader.nTPBy, ClosestPairwiseLoopShader.nTPBz);
+        this.pipeline = device.createComputePipeline({
+            layout: pipelineLayout,
+            compute: {
+                module: shaderCode,
+                entryPoint: "closest_pairwise_loop",
+                constants: {
+                    nTPBx: ClosestPairwiseLoopShader.nTPBx,
+                    nTPBy: ClosestPairwiseLoopShader.nTPBy,
+                    nTPBz: ClosestPairwiseLoopShader.nTPBz,
+                }
+            }
+        })
+
+        this.isSetup = true;
+    }
+
+    encode(pass:GPUComputePassEncoder) {
+        if (!this.isSetup) {
+            throw new Error("ClosestPairwiseLoopShader is not setup");
+        }
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.bindGroup);
+        pass.dispatchWorkgroups(this.MAX_BLOCKS_X,1,1)
     }
 }
 
