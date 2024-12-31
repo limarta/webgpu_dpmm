@@ -1369,7 +1369,6 @@ export class ClosestPairwiseLoopShader implements ShaderEncoder {
             code: ClosestPairwiseLoopCode
         });
 
-        console.log(ClosestPairwiseLoopShader.nTPBx, ClosestPairwiseLoopShader.nTPBy, ClosestPairwiseLoopShader.nTPBz);
         this.pipeline = device.createComputePipeline({
             layout: pipelineLayout,
             compute: {
