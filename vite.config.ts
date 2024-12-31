@@ -6,4 +6,7 @@ export default {
       fileRegex: /\.wgsl$/,
     }),
   ],
+  optimizeDeps: {
+    exclude: ['plotly.js'],
+  }
 };

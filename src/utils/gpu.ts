@@ -72,34 +72,28 @@ export function createBindGroup(device: GPUDevice, layout: GPUBindGroupLayout, b
     );
 }
 
-export async function log(device:GPUDevice, buffer:GPUBuffer, uint: boolean) {
-    const cpuBuffer = device.createBuffer({
-        size: buffer.size,
+export async function writeToCPU(device: GPUDevice, buffer: GPUBuffer, size: number, uint: boolean = true) {
+    const stagingBuffer = device.createBuffer({
+        size: size,
         usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });
 
-    const encoder = device.createCommandEncoder();
-    encoder.copyBufferToBuffer(
-        buffer, 0,
-        cpuBuffer, 0,
-        buffer.size
-    );
-    const gpuCommands = encoder.finish();
-    device.queue.submit([gpuCommands]);
+    const commandEncoder = device.createCommandEncoder();
+    commandEncoder.copyBufferToBuffer(buffer, 0, stagingBuffer, 0, size);
+    device.queue.submit([commandEncoder.finish()]);
 
-    await cpuBuffer.mapAsync(GPUMapMode.READ);
+    await stagingBuffer.mapAsync(GPUMapMode.READ);
+    const copyArrayBuffer = stagingBuffer.getMappedRange();
+    const data = new Float32Array(copyArrayBuffer.slice(0));
+    
+    stagingBuffer.unmap();
+    stagingBuffer.destroy();
+    return data
+}
 
-    const arr_ = cpuBuffer.getMappedRange();
-    if (uint) {
-        let arr = new Uint32Array(arr_);
-        console.log(arr);
-    } else {
-        let arr = new Float32Array(arr_);
-        console.log(arr);
-    }
-    cpuBuffer.unmap();
-    cpuBuffer.destroy();
-
+export async function log(device:GPUDevice, buffer:GPUBuffer, uint: boolean) {
+    let arr = await writeToCPU(device, buffer, buffer.size, uint);
+    console.log(arr)
 }
 
 }

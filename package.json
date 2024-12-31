@@ -5,20 +5,22 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:browser": "vitest --workspace=vitest.workspace.ts"
   },
   "devDependencies": {
-    "@tweakpane/core": "^1.1.7",
     "@types/plotly.js": "^2.35.1",
-    "@webgpu/types": "^0.1.31",
-    "typescript": "^5.0.4",
+    "@vitest/browser": "^2.1.8",
+    "@webgpu/types": "^0.1.52",
+    "playwright": "^1.49.1",
+    "typescript": "^5.7.2",
     "vite": "^4.3.1",
-    "vite-raw-plugin": "^1.0.1"
+    "vite-raw-plugin": "^1.0.1",
+    "vitest": "^2.1.8"
   },
   "dependencies": {
     "papaparse": "^5.4.1",
-    "plotly.js-dist": "^2.35.2",
-    "tweakpane": "^3.1.8",
-    "wgpu-matrix": "^3.2.0"
+    "plotly.js-dist": "^2.35.2"
   }
 }
