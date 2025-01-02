@@ -30,7 +30,7 @@ export class TransposeShader implements ShaderEncoder {
     
     isSetup: boolean = false;
 
-    static nTPB: number = 4;
+    static nTPB: number = 8;
 
     constructor(M: number, N: number) {
         this.M = M;
@@ -274,6 +274,7 @@ export class Sum2DShader implements ShaderEncoder {
     N: number;
     MAX_BLOCKS_X: number;
     columnSizes: number[];
+    nTPB: number;
 
     dimensionUniformBuffer: GPUBuffer;
     inputBuffer: GPUBuffer;
@@ -294,7 +295,6 @@ export class Sum2DShader implements ShaderEncoder {
     isSetup: boolean = false;
 
     static UNIFORM_STRIDE: number = 256;
-    static nTPB: number = 32;
 
     /**
      * 
@@ -305,10 +305,11 @@ export class Sum2DShader implements ShaderEncoder {
     constructor(
         M:number, 
         N:number, 
+        nTPB:number = 32,
     ) {
         this.M = M;
         this.N = N;
-        let nTPB = Sum2DShader.nTPB;
+        this.nTPB = nTPB
         this.MAX_BLOCKS_X = Math.ceil(M/nTPB)
 
         this.columnSizes = [];
@@ -335,7 +336,7 @@ export class Sum2DShader implements ShaderEncoder {
 
         this.dimensionUniformBuffer = device.createBuffer({
             label: "dimension_uniform",
-            size: Sum2DShader.UNIFORM_STRIDE*5, // assumption: at most 5 reductions
+            size: Sum2DShader.UNIFORM_STRIDE*7, // assumption: at most 7 reductions
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
         });
 
@@ -343,7 +344,7 @@ export class Sum2DShader implements ShaderEncoder {
         var width = this.M;
         for(let i = 0 ; i < this.columnSizes.length; i++) {
             device.queue.writeBuffer(this.dimensionUniformBuffer, i*Sum2DShader.UNIFORM_STRIDE, new Uint32Array([width, this.N]));
-            width = Math.ceil(width / Sum2DShader.nTPB);
+            width = Math.ceil(width / this.nTPB);
         }
 
         this.scratchBuffer_1 = GPUUtils.createStorageBuffer(device, new Float32Array(this.MAX_BLOCKS_X * this.N));
@@ -539,7 +540,7 @@ export class Sum2DShader implements ShaderEncoder {
                 module: this.shaderCode,
                 entryPoint: "sum2d",
                 constants: {
-                    nTPB: Sum2DShader.nTPB,
+                    nTPB: this.nTPB,
                 }
             }
         });
@@ -549,11 +550,11 @@ export class Sum2DShader implements ShaderEncoder {
 
     encode(pass:GPUComputePassEncoder) {
         if (!this.isSetup) {
-            throw new Error("Sum3DShader is not setup");
+            throw new Error("Sum2DShader is not setup");
         }
 
         pass.setPipeline(this.pipeline);
-        if (this.M <= Sum3DShader.nTPB) {
+        if (this.M <= this.nTPB) {
             pass.setBindGroup(0, this.bindGroup_5, [0]);
             pass.dispatchWorkgroups(1,this.N);
             return;
@@ -563,36 +564,27 @@ export class Sum2DShader implements ShaderEncoder {
         pass.dispatchWorkgroups(this.columnSizes[1], this.N);
 
         var lastBuffer = true;
-        for (let i = 1 ; i < this.columnSizes.length-1; i++) {
-            let NUM_WORKGROUPS = this.columnSizes[i+1];
+        for (let i = 1 ; i < this.columnSizes.length-2; i++) {
+            let num_workgroups = this.columnSizes[i+1];
+            // console.log(num_workgroups)
             if (i%2 == 1) {
+                // console.log("bg2")
                 lastBuffer = false;
                 pass.setBindGroup(0, this.bindGroup_1, [i*Sum2DShader.UNIFORM_STRIDE]);
             } else {
+                // console.log("bg1")
                 lastBuffer = true;
                 pass.setBindGroup(0, this.bindGroup_2, [i*Sum2DShader.UNIFORM_STRIDE]);    
             }
-            pass.dispatchWorkgroups(NUM_WORKGROUPS, this.N);
+            pass.dispatchWorkgroups(num_workgroups, this.N);
         }
 
         if (lastBuffer) {
-            pass.setBindGroup(0, this.bindGroup_3, [(this.columnSizes.length-1)*Sum2DShader.UNIFORM_STRIDE]);
+            pass.setBindGroup(0, this.bindGroup_3, [(this.columnSizes.length-2)*Sum2DShader.UNIFORM_STRIDE]);
         } else {
-            pass.setBindGroup(0, this.bindGroup_4, [(this.columnSizes.length-1)*Sum2DShader.UNIFORM_STRIDE]);
+            pass.setBindGroup(0, this.bindGroup_4, [(this.columnSizes.length-2)*Sum2DShader.UNIFORM_STRIDE]);
         }
         pass.dispatchWorkgroups(1, this.N)
-
-        // pass.setPipeline(this.pipeline);
-        // for(let i = 0 ; i < this.columnSizes.length; i++) {
-        //     if (i % 2 ==0) {
-        //         var bg = this.bindGroup1;
-        //     } else {
-        //         var bg = this.bindGroup2;
-        //     }
-        //     pass.setBindGroup(0, bg, [i*Sum2DShader.UNIFORM_STRIDE,]);
-        //     var workgroups = Math.ceil(this.columnSizes[i]/Sum2DShader.nTPB);
-        //     pass.dispatchWorkgroups(workgroups, this.M, 1);
-        // }
     }
 }
 

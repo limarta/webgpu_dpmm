@@ -84,7 +84,12 @@ export async function writeToCPU(device: GPUDevice, buffer: GPUBuffer, size: num
 
     await stagingBuffer.mapAsync(GPUMapMode.READ);
     const copyArrayBuffer = stagingBuffer.getMappedRange();
-    const data = new Float32Array(copyArrayBuffer.slice(0));
+    var data;
+    if (uint) {
+        data = new Uint32Array(copyArrayBuffer.slice(0));
+    } else {
+        data = new Float32Array(copyArrayBuffer.slice(0));
+    }
     
     stagingBuffer.unmap();
     stagingBuffer.destroy();
