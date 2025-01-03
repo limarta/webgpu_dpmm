@@ -11,6 +11,7 @@ export default mergeConfig(
         provider: 'playwright',
         name: 'chromium',
         headless: true,
+        screenshotFailures: false,
         providerOptions: {
           launch: {
             args: ['--enable-gpu', '--enable-unsafe-webgpu'],

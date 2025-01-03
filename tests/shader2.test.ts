@@ -1,0 +1,178 @@
+import {expect, test} from 'vitest'
+import {beforeAll} from 'vitest'
+import {Ops} from '../src/utils/ops'
+import {GPUUtils} from '../src/utils/gpu'
+
+let device: GPUDevice;
+function createPass(shaders) {
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginComputePass();
+    for (const shader of shaders) {
+        shader.encode(pass);
+    }
+    pass.end();
+    device.queue.submit([encoder.finish()])
+}
+
+beforeAll(async () => {
+    if (navigator.gpu === undefined) {
+        const h = document.querySelector('#title') as HTMLElement;
+        h.innerText = 'WebGPU is not supported in this browser.';
+    }
+    const adapter = await navigator.gpu.requestAdapter();
+    if (adapter === null) {
+      const h = document.querySelector('#title') as HTMLElement;
+      h.innerText = 'No adapter is available for WebGPU.';
+      return;
+    }
+    device = await adapter.requestDevice();
+});
+
+test('unsorted_segment_sum_2d_basic', async() => {
+    let M = 5;
+    let N = 3;
+    let data = new Float32Array([
+        1, 2, 3, 4, 5,
+        6, 7, 8, 9, 10,
+        11, 12, 13, 14, 15
+    ])
+    let segmentIds = new Uint32Array([0, 1, 0, 1, 0])
+    let K = 2;
+    let expected = new Float32Array([
+        9, 6,
+        24, 16,
+        39, 26
+    ]);
+
+    const inputBuffer = GPUUtils.createStorageBuffer(device, data);
+    const segmentIdsBuffer = GPUUtils.createStorageBuffer(device, segmentIds);
+    const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*K));
+
+    const shader = new Ops.UnsortedSegmentSum2DShader(M, N, K);
+    await shader.setup(device, inputBuffer, segmentIdsBuffer, outputBuffer);
+
+    createPass([shader]);
+
+    await device.queue.onSubmittedWorkDone();
+    const output = await GPUUtils.writeToCPU(device, outputBuffer, N*K*4, false);
+
+    expect(output).toEqual(expected);
+})
+
+test('unsorted_segment_sum_2d', async() => {
+    // let M = 3;
+    // let N = 2;
+    // let K = 2;
+    // const PHI = 1.61803398875;
+
+    // function segmentSum2d(data, segmentIds, M, N, K) {
+    //     let output = new Float32Array(N*K);
+    //     for (let j = 0 ; j < N ; j++) {
+    //         for (let i = 0 ; i < M ; i++) {
+    //             let segmentId = segmentIds[i];
+    //             output[j*K+segmentId] += data[i + j * M];
+    //         }
+    //     }
+    //     return output;
+    // }
+
+    // for(let i = 0 ; i < 1 ; i++) {
+    //     let data = new Float32Array(M*N);
+    //     let segmentIds = new Float32Array(M);
+    //     for (let j = 0 ; j < M*N ; j++) {
+    //         data[j] = j+1;
+    //     }
+    //     console.log("data ", data)
+
+    //     for (let j = 0 ; j < M ; j++) {
+    //         segmentIds[j] = j % K;
+    //     }
+    //     console.log("ids ", segmentIds)
+    //     const expected =segmentSum2d(data, segmentIds, M, N, K); 
+    //     console.log("expected ", expected);
+
+    //     let inputBuffer = GPUUtils.createStorageBuffer(device, data);
+    //     let segmentIdsBuffer = GPUUtils.createStorageBuffer(device, segmentIds);
+    //     let outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*K));
+    //     let shader = new Ops.UnsortedSegmentSum2DShader(M, N, K);
+    //     await shader.setup(device, inputBuffer, segmentIdsBuffer, outputBuffer);
+
+    //     createPass([shader]);
+
+    //     await device.queue.onSubmittedWorkDone();
+    //     let output = await GPUUtils.writeToCPU(device, outputBuffer, N*K*4, false);
+    //     expect(output).toEqual(expected)
+    // }
+
+
+});
+
+test('sum3d_basic', async() => {
+    let M = 2;
+    let N = 3;
+    let K = 4;
+
+    let data = new Float32Array([
+        1, 2, 3, 4, 5, 6,
+        7, 8, 9, 10, 11, 12,
+        13, 14, 15, 16, 17, 18,
+        19, 20, 21, 22, 23, 24
+    ]);
+
+    let expected = new Float32Array([
+        3, 7, 11,
+        15, 19, 23,
+        27, 31, 35,
+        39, 43, 47
+    ])
+
+    let inputBuffer = GPUUtils.createStorageBuffer(device, data);
+    let outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*K));
+
+    let shader = new Ops.Sum3DShader(M, N, K);
+    await shader.setup(device, inputBuffer, outputBuffer);
+    createPass([shader]);
+
+    await device.queue.onSubmittedWorkDone();
+    let output = await GPUUtils.writeToCPU(device, outputBuffer, N*K*4, false);
+    expect(output).toEqual(expected);
+});
+
+test('sum3d', async() => {
+    let M = 3;
+    let N = 2;
+    let K = 2;
+    const PHI = 1.61803398875;
+
+    function sum3d(data, M, N, K) {
+        let output = new Float32Array(N*K);
+        for (let j = 0 ; j < N ; j++) {
+            for (let i = 0 ; i < M ; i++) {
+                for (let k = 0 ; k < K ; k++) {
+                    output[j + k * N] += data[i + j * M + k * M * N];
+                }
+            }
+        }
+        return output;
+    }
+
+    for(let i = 0 ; i < 14 ; i++) {
+        M = Math.floor(M * PHI);
+
+        let data = new Float32Array(M*N*K);
+        for (let j = 0 ; j < M*N*K ; j++) {
+            data[j] = j+1;
+        }
+        let expected = sum3d(data, M, N, K);
+        
+        let inputBuffer = GPUUtils.createStorageBuffer(device, data);
+        let outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(N*K));
+        let shader = new Ops.Sum3DShader(M, N, K);
+        await shader.setup(device, inputBuffer, outputBuffer);
+        createPass([shader]);
+
+        await device.queue.onSubmittedWorkDone();
+        let output = await GPUUtils.writeToCPU(device, outputBuffer, N*K*4, false);
+        expect(output).toEqual(expected)
+    }
+})
