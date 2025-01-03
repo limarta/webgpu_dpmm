@@ -89,7 +89,7 @@ test('transpose', async () => {
     }
 });
 
-test('add_basic', async () => {
+test('sum_basic', async () => {
     let data = new Float32Array([
         1, 2, 3, 4,
         5, 6, 7, 8,
@@ -109,7 +109,7 @@ test('add_basic', async () => {
     expectArraysToBeCloseTo(expected, output, 1e-6);
 });
 
-test('add_1', async() => {
+test('sum_1', async() => {
     let M = 3; 
     const PHI = 1.618033;
     
@@ -145,20 +145,13 @@ test('add_1', async() => {
         createPass([addShader]);
         await device.queue.onSubmittedWorkDone();
         const output = await GPUUtils.writeToCPU(device, outputBuffer, LEN*4, false)
-        // await GPUUtils.log(device, addShader.scratchBuffer_1, false);
-        // let sb1 = await GPUUtils.writeToCPU(device, addShader.scratchBuffer_1, LEN*4, false)
-        // let sb2 = await GPUUtils.writeToCPU(device, addShader.scratchBuffer_2, LEN*4, false)
-        // console.log("sum of sb1 ", sb1.reduce((a, b) => a+b, 0))
-        // await GPUUtils.log(device, addShader.scratchBuffer_2, false);
-        // await GPUUtils.log(device, outputBuffer, false);
-        // console.log("SUM ", sum)
         expectArraysToBeCloseTo(expected, output, 1e-6);
         inputBuffer.destroy();
         outputBuffer.destroy();
     }
 });
 
-test('add_long', async() => {
+test('sum_long', async() => {
     let M = 4; 
     const PHI = 1.618033;
     

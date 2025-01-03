@@ -271,3 +271,74 @@ test('shortest_pairwise_loop', async() => {
         expect(output).toEqual(expected);
     }
 });
+
+test('count_basic', async() => {
+    let data = new Uint32Array([0, 1, 0, 1, 0, 2]);
+    
+    let inputBufer = GPUUtils.createStorageBuffer(device, data);
+    let outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(3));
+    let shader = new Ops.CountShader(6, 3);
+
+    await shader.setup(device, inputBufer, outputBuffer);
+    createPass([shader]);
+
+    await device.queue.onSubmittedWorkDone();
+    let output = await GPUUtils.writeToCPU(device, outputBuffer, 3*4, false);
+    expect(output).toEqual(new Float32Array([3, 2, 1]));
+});
+
+test('count_0', async() => {
+    let M = 3;
+    let PHI = 1.61803398875;
+    let K = 4;
+
+    for(let i = 0 ; i < 20 ; i++) {
+        M = Math.floor(M * PHI);
+        let data = new Uint32Array(M);
+        for (let j = 0 ; j < M ; j++) {
+            data[j] = j % K;
+        }
+        let expected = new Float32Array(K);
+        for (let j = 0 ; j < M ; j++) {
+            expected[data[j]] += 1;
+        }
+
+        let inputBuffer = GPUUtils.createStorageBuffer(device, data);
+        let outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(K));
+        let shader = new Ops.CountShader(M, K);
+        await shader.setup(device, inputBuffer, outputBuffer);
+        createPass([shader]);
+
+        await device.queue.onSubmittedWorkDone();
+        let output = await GPUUtils.writeToCPU(device, outputBuffer, K*4, false);
+        expect(output).toEqual(expected);
+    }
+});
+
+test('count_1', async() => {
+    let M = 3;
+    let PHI = 1.61803398875;
+    let K = 33;
+
+    for(let i = 0 ; i < 10 ; i++) {
+        M = Math.floor(M * PHI);
+        let data = new Uint32Array(M);
+        for (let j = 0 ; j < M ; j++) {
+            data[j] = j % K;
+        }
+        let expected = new Float32Array(K);
+        for (let j = 0 ; j < M ; j++) {
+            expected[data[j]] += 1;
+        }
+
+        let inputBuffer = GPUUtils.createStorageBuffer(device, data);
+        let outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(K));
+        let shader = new Ops.CountShader(M, K);
+        await shader.setup(device, inputBuffer, outputBuffer);
+        createPass([shader]);
+
+        await device.queue.onSubmittedWorkDone();
+        let output = await GPUUtils.writeToCPU(device, outputBuffer, K*4, false);
+        expect(output).toEqual(expected);
+    }
+});

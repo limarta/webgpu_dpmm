@@ -325,11 +325,11 @@ export class Sum2DShader implements ShaderEncoder {
 
     async setup(device:GPUDevice, inputBuffer:GPUBuffer, outputBuffer: GPUBuffer) {
         if (inputBuffer.size / 4 != this.M * this.N) {
-            throw new Error(`inputBuffer size must be equal to M*N, but got ${inputBuffer.size / 4} and ${this.M * this.N}`);
+            throw new Error(`inputBuffer size must be equal to ${this.M*this.N}, but got ${inputBuffer.size / 4}`);
         }
 
         if (outputBuffer.size / 4 != this.N) {
-            throw new Error(`outputBuffer size must be equal to N, but got ${outputBuffer.size / 4} and ${this.N}`);
+            throw new Error(`outputBuffer size must be equal to ${this.N}, but got ${outputBuffer.size / 4}`);
         }
 
         this.inputBuffer = inputBuffer;
@@ -593,6 +593,7 @@ export class UnsortedSegmentSumShader implements ShaderEncoder {
     N: number;
     num_segments: number;
     N_intermediate: number;
+    nTPB: number;
 
     dimsUniformBuffer:GPUBuffer;
     segmentCountUniformBuffer: GPUBuffer;
@@ -608,23 +609,23 @@ export class UnsortedSegmentSumShader implements ShaderEncoder {
 
     isSetup: boolean = false;
 
-    static nTPB: number = 32;
 
     /**
      * 
      * @param N  - number of entries in the input array
      * @param num_segments - number of segments
      */
-    constructor(N: number, num_segments: number) {
+    constructor(N: number, num_segments: number, nTPB: number = 32) {
         this.N = N
         this.num_segments = num_segments;
-        this.N_intermediate = Math.ceil(N / UnsortedSegmentSumShader.nTPB);
+        this.nTPB = nTPB;
+        this.N_intermediate = Math.ceil(N / this.nTPB);
         this.sum2DShader = new Sum2DShader(this.N_intermediate, this.num_segments);
     }
 
     async setup(device: GPUDevice, inputBuffer: GPUBuffer, segmentIdBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
         if (inputBuffer.size / 4 != this.N) {
-            throw new Error(`dataBuffer size must be equal to N, but got ${inputBuffer.size / 4} and ${this.N}`);
+            throw new Error(`dataBuffer size must be equal to ${this.N}, but got ${inputBuffer.size / 4}`);
         }
 
         if (inputBuffer.size != segmentIdBuffer.size) {
@@ -719,7 +720,7 @@ export class UnsortedSegmentSumShader implements ShaderEncoder {
                 module: computeShaderModule,
                 entryPoint: "main",
                 constants: {
-                    nTPB: UnsortedSegmentSumShader.nTPB,
+                    nTPB: this.nTPB,
                 }
             },
         });
