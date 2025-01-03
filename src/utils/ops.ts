@@ -135,6 +135,7 @@ export class MatVecElementwiseShader implements ShaderEncoder {
     M: number;
     N: number;
     op: OpType;
+    nTPB: number;
 
     dimsUniformBuffer: GPUBuffer;
     matrixBuffer: GPUBuffer;
@@ -146,12 +147,12 @@ export class MatVecElementwiseShader implements ShaderEncoder {
 
     isSetup:boolean = false;
 
-    static nTPB: number = 32;
 
-    constructor(M:number , N: number, op:OpType = OpType.PLUS) {
+    constructor(M:number , N: number, op:OpType = OpType.PLUS, nTPB:number = 32) {
         this.M = M;
         this.N = N;
         this.op = op;
+        this.nTPB = 32;
     }
 
     async setup(device:GPUDevice, matrixBuffer:GPUBuffer, vectorBuffer:GPUBuffer, outputBuffer:GPUBuffer) {
@@ -248,7 +249,7 @@ export class MatVecElementwiseShader implements ShaderEncoder {
                 module: shaderCode,
                 entryPoint: "main",
                 constants: {
-                    nTPB: MatVecElementwiseShader.nTPB,
+                    nTPB: this.nTPB,
                     op: this.op
                 }
             }
@@ -264,7 +265,7 @@ export class MatVecElementwiseShader implements ShaderEncoder {
         }
         pass.setPipeline(this.pipeline);
         pass.setBindGroup(0, this.bindGroup);
-        pass.dispatchWorkgroups(Math.ceil(this.M * this.N / MatVecElementwiseShader.nTPB), 1);
+        pass.dispatchWorkgroups(Math.ceil(this.M * this.N / this.nTPB), 1);
     }
 
 }
@@ -627,11 +628,11 @@ export class UnsortedSegmentSumShader implements ShaderEncoder {
         }
 
         if (inputBuffer.size != segmentIdBuffer.size) {
-            throw new Error(`dataBuffer size must be equal to segmentIdBuffer size, but got ${inputBuffer.size} and ${segmentIdBuffer.size}`);
+            throw new Error(`segmentIdBuffer size must be equal to ${segmentIdBuffer.size}, but got ${inputBuffer.size}`);
         }
 
         if (outputBuffer.size/4 != this.num_segments) {
-            throw new Error(`outputBuffer size must be equal to num_segments, but got ${outputBuffer.size} and ${this.num_segments}`);
+            throw new Error(`outputBuffer size must be equal to ${this.num_segments}, but got ${outputBuffer.size}`);
         }
 
         this.inputBuffer = inputBuffer;
@@ -764,7 +765,7 @@ export class Sum3DShader implements ShaderEncoder {
     isSetup: boolean = false;
 
     static UNIFORM_STRIDE = 256;
-    static nTPB: number = 64;
+    static nTPB: number = 32;
 
     constructor(M: number, N: number, K: number) {
         this.M = M;
