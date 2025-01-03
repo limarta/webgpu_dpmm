@@ -51,4 +51,5 @@ fn main(
         let index = workgroup_id.x + idk * MAX_BLOCKS_X + idy * MAX_BLOCKS_X*K;
         output[index] = temp[nTPB-1];
     }
+
 }

@@ -1057,6 +1057,7 @@ export class UnsortedSegmentSum2DShader implements ShaderEncoder {
     N: number;
     num_segments: number;
     M_intermediate: number;
+    nTPB: number;
 
     dimsUniformBuffer:GPUBuffer;
     segmentCountUniformBuffer: GPUBuffer;
@@ -1072,7 +1073,6 @@ export class UnsortedSegmentSum2DShader implements ShaderEncoder {
 
     isSetup: boolean = false;
 
-    static nTPB: number = 64;
 
     /**
      * 
@@ -1081,11 +1081,12 @@ export class UnsortedSegmentSum2DShader implements ShaderEncoder {
      * @param num_segments - maximum number of unique segment ids.
      * 
      */
-    constructor(M: number, N: number, num_segments: number) {
+    constructor(M: number, N: number, num_segments: number, nTPB: number = 32) {
         this.M = M;
         this.N = N;
         this.num_segments = num_segments;
-        this.M_intermediate = Math.ceil(M / UnsortedSegmentSum2DShader.nTPB);
+        this.nTPB = nTPB;
+        this.M_intermediate = Math.ceil(M / this.nTPB);
         this.sum3DShader = new Sum3DShader(this.M_intermediate, this.N, this.num_segments);
     }
 
@@ -1184,7 +1185,7 @@ export class UnsortedSegmentSum2DShader implements ShaderEncoder {
                 module: computeShaderModule,
                 entryPoint: "main",
                 constants: {
-                    nTPB: UnsortedSegmentSum2DShader.nTPB,
+                    nTPB: this.nTPB,
                 }
             },
         });
