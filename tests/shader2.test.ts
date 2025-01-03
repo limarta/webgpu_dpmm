@@ -2,6 +2,7 @@ import {expect, test} from 'vitest'
 import {beforeAll} from 'vitest'
 import {Ops} from '../src/utils/ops'
 import {GPUUtils} from '../src/utils/gpu'
+import { L } from 'vitest/dist/chunks/reporters.D7Jzd9GS.js';
 
 let device: GPUDevice;
 function createPass(shaders) {
@@ -172,3 +173,53 @@ test('sum3d', async() => {
         expect(output).toEqual(expected)
     }
 })
+
+test('shortest_pairwise_loop_basic_0', async() => {
+    let input1 = new Float32Array([
+        0, 1, 2, 3, 5
+    ]);
+    
+    let input2 = new Float32Array([
+        0, -1, 2, 6,
+    ]);
+    let expected = new Uint32Array([0, 0, 2, 2, 3]);
+
+    let inputBuffer1 = GPUUtils.createStorageBuffer(device, input1);
+    let inputBuffer2 = GPUUtils.createStorageBuffer(device, input2);
+    let outputBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(5));
+    let shader = new Ops.ClosestPairwiseLoopShader(5, 4, 1);
+
+    await shader.setup(device, inputBuffer1, inputBuffer2, outputBuffer);
+    createPass([shader]);
+
+    await device.queue.onSubmittedWorkDone();
+    let output = await GPUUtils.writeToCPU(device, outputBuffer, 5*4, true);
+    expect(output).toEqual(expected);
+
+});
+
+test('shortest_pairwise_loop_basic_1', async() => {
+    let input1 = new Float32Array([
+        0, 0, 3, // feature 1
+        0, 1, 3 // feature 2
+    ]);
+    
+    let input2 = new Float32Array([
+        0, 4, 
+        0, 4,
+    ]);
+    let expected = new Uint32Array([0, 0, 1]);
+
+    let inputBuffer1 = GPUUtils.createStorageBuffer(device, input1);
+    let inputBuffer2 = GPUUtils.createStorageBuffer(device, input2);
+    let outputBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(3));
+    let shader = new Ops.ClosestPairwiseLoopShader(3, 2, 2);
+
+    await shader.setup(device, inputBuffer1, inputBuffer2, outputBuffer);
+    createPass([shader]);
+
+    await device.queue.onSubmittedWorkDone();
+    let output = await GPUUtils.writeToCPU(device, outputBuffer, 3*4, true);
+    expect(output).toEqual(expected);
+
+});
