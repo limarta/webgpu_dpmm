@@ -1093,7 +1093,7 @@ export class UnsortedSegmentSum2DShader implements ShaderEncoder {
 
     async setup(device: GPUDevice, inputBuffer: GPUBuffer, segmentIdBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
         if (inputBuffer.size / 4 != this.M * this.N) {
-            throw new Error(`dataBuffer size must be equal to N, but got ${inputBuffer.size / 4} and ${this.M * this.N}`);
+            throw new Error(`dataBuffer size must be equal to ${this.M*this.N}, but got ${inputBuffer.size / 4}`);
         }
 
         if (segmentIdBuffer.size /4 != this.M) {
