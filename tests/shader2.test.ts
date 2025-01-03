@@ -223,3 +223,51 @@ test('shortest_pairwise_loop_basic_1', async() => {
     expect(output).toEqual(expected);
 
 });
+
+test('shortest_pairwise_loop', async() => {
+    let M1 = 3;
+    let M2 = 5;
+    let K = 4;
+    const PHI = 1.61803398875;
+
+    for(let i = 0 ; i < 22 ; i++) {
+        M1 = Math.floor(M1 * PHI);
+        let input1 = new Float32Array(M1*K);
+        let input2 = new Float32Array(M2*K);
+        for (let j = 0 ; j < M1*K ; j++) {
+            input1[j] = (j+1) % 10;
+        }
+        for (let j = 0 ; j < M2*K ; j++) {
+            input2[j] = (j+1) % 7;
+        }
+        let expected = new Uint32Array(M1);
+
+        for (let j = 0 ; j < M1 ; j++) {
+            let minDist = Number.MAX_VALUE;
+            let minIndex = 0;
+            for (let k = 0 ; k < M2 ; k++) {
+                let dist = 0;
+                for (let l = 0 ; l < K ; l++) {
+                    dist += Math.pow(input1[j + l * M1] - input2[k+l*M2], 2);
+                }
+                if (dist < minDist) {
+                    minDist = dist;
+                    minIndex = k;
+                }
+            }
+            expected[j] = minIndex;
+        }
+
+        let inputBuffer1 = GPUUtils.createStorageBuffer(device, input1);
+        let inputBuffer2 = GPUUtils.createStorageBuffer(device, input2);
+        let outputBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(M1));
+        let shader = new Ops.ClosestPairwiseLoopShader(M1, M2, K);
+
+        await shader.setup(device, inputBuffer1, inputBuffer2, outputBuffer);
+        createPass([shader]);
+
+        await device.queue.onSubmittedWorkDone();
+        let output = await GPUUtils.writeToCPU(device, outputBuffer, M1*4, true);
+        expect(output).toEqual(expected);
+    }
+});
