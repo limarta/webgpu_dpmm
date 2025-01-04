@@ -1,118 +1,73 @@
 import {Random} from '../utils/rng.ts';
 import {GPUUtils} from '../utils/gpu.ts';
+import {Ops} from '../utils/ops.ts';
+import {ShaderEncoder} from '../utils/shader.ts'
 
-namespace DPMM{
 
-export class Numericals {
-  seedBuffer: GPUBuffer
+class KMeansShader implements ShaderEncoder {
+  M: number;
+  N: number;
+  K: number;
 
-  muDimsBuffer: GPUBuffer
-  muRandBuffer: GPUBuffer
-  muBuffer: GPUBuffer
-  dataBuffer: GPUBuffer
-  scratchBuffer: GPUBuffer
-  N: number // Number of samples
-  F: number // Number of numerical featuers
-  K: number // Number of clusters
-  K_max: number // Maximum possible number of clusters on buffer
+  dataBuffer: GPUBuffer;
+  segmentIdsBuffer: GPUBuffer;
+  countsBuffer: GPUBuffer;
+  meansBuffer: GPUBuffer;
+  meansBufferTranspose: GPUBuffer;
 
-  muRandShader: Random.NormalShaderEncoder
-//   segmentedSum2DShader: SegementedSum2DShaderEncoder
-  constructor(N: number, F: number, K:number, K_max: number) {
-    if (K > K_max) {
-        throw new Error(`K=${K} is greater than K_max=${K_max}`);
-    }
-    this.seedBuffer = null;
-    this.muBuffer = null;
-    this.muBuffer = null;
-    this.muDimsBuffer = null;
-    this.scratchBuffer = null;
+  shaders: Array<ShaderEncoder>;
+
+  isSetup: boolean = false;
+  /**
+   * 
+   * @param M - number of data points
+   * @param N - number of features
+   * @param K - number of clusters
+   */
+  constructor(M: number, N:number, K: number) {
+    this.M = M;
     this.N = N;
-    this.F = F;
     this.K = K;
-    this.K_max = K_max;
+    this.shaders = [
+      new Ops.UnsortedSegmentSum2DShader(M, N, K),
+      new Ops.TransposeShader(N, K),
+      new Ops.CountShader(M, K),
+      new Ops.MatVecElementwiseShader(K, N, 3),
+      new Ops.TransposeShader(K, N),
+      new Ops.ClosestPairwiseLoopShader(M, K, N),
+    ];
   }
 
-  async setup(device, seedBuffer: GPUBuffer, dataBuffer: GPUBuffer) {
-    this.seedBuffer = seedBuffer;
+  async setup(
+    device:GPUDevice, 
+    dataBuffer: GPUBuffer, 
+    segmentIdsBuffer: GPUBuffer, 
+  ) {
     this.dataBuffer = dataBuffer;
-    this.muDimsBuffer = GPUUtils.createUniform(device, new Uint32Array([this.K_max*this.F]));
-    this.muRandBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(this.K_max*this.F*4));
-    this.muBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.K_max*this.F));
+    this.segmentIdsBuffer = segmentIdsBuffer;
+    let countsBuffer = this.countsBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.K));
+    let meansBuffer = this.meansBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.N*this.K));
+    let meansBufferTranspose = this.meansBufferTranspose = GPUUtils.createStorageBuffer(device, new Float32Array(this.N*this.K));
 
-    this.muRandShader = new Random.NormalShaderEncoder(
-        device, 
-        this.K_max*this.F,
-        this.seedBuffer, 
-        this.muDimsBuffer, 
-        this.muRandBuffer, 
-        this.muBuffer
-    );
+    await this.shaders[0].setup(device, dataBuffer, segmentIdsBuffer, meansBuffer);
+    await this.shaders[1].setup(device, meansBuffer, meansBufferTranspose);
+    await this.shaders[2].setup(device, segmentIdsBuffer, countsBuffer);
+    await this.shaders[3].setup(device, meansBufferTranspose, countsBuffer, meansBuffer);
+    await this.shaders[4].setup(device, meansBuffer, meansBufferTranspose);
+    await this.shaders[5].setup(device, dataBuffer, meansBufferTranspose, segmentIdsBuffer);
 
-    // this.segmentedSum2DShader = new SegementedSum2DShaderEncoder();
-
+    this.isSetup = true;
   }
 
-  encode_init(pass:GPUComputePassEncoder) {
-    this.muRandShader.encode(pass);
-  }
-
-  encode_update_means(pass:GPUComputePassEncoder) {
-    // this.segmentedSum2DShader.encode(pass);
-    // this.sum2DShader.encode(pass);
-  }
-
-  encode_update_assignments(pass:GPUComputePassEncoder) {
-
-  }
-}
-
-// type Assignments = {
-//   assignments: GPUBuffer
-// }
-
-// type ClusterProportions = {
-
-// }
-
-export class KMeans {
-    device: GPUDevice
-    N: number
-    F: number
-    K: number
-    data: Float32Array
-    numericals: Numericals
-    constructor(K: number) {
-        this.N = 16;
-        this.K = K;
-        this.F = 1;
-        this.numericals = new Numericals(this.N, this.F, this.K, this.K)
+  encode(pass:GPUComputePassEncoder) {
+    if (!this.isSetup) {
+      throw new Error('KMeansShader is not setup');
     }
-
-    async setup(device: GPUDevice) {
-        this.device = device
-        const seedBuffer = GPUUtils.createUniform(device, new Uint32Array([0,0,0,1]))
-        const dataBuffer = GPUUtils.createStorageBuffer(device, new Float32Array([0.0, 0.0, 0.0, 0.0]))
-        await this.numericals.setup(device, seedBuffer, dataBuffer)
-
+    for(let shader of this.shaders) {
+      shader.encode(pass);
     }
-
-    async step(device:GPUDevice) {
-        const encoder = device.createCommandEncoder();
-        const pass = encoder.beginComputePass();
-        this.numericals.encode_init(pass);
-        pass.end();
-
-        device.queue.submit([encoder.finish()]);
-    }
-}
-// type DPMM = {
-//   N: number
-//   pi: ClusterProportions,
-//   numericals: Numericals,
-//   assignments: Assignments
-// }
+  }
 
 }
 
-export {DPMM};
+export {KMeansShader}

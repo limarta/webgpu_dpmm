@@ -1,5 +1,5 @@
 import Plotly from 'plotly.js-dist';
-import {DPMM} from './k_means/kmeans.ts'
+import {KMeansShader} from './k_means/kmeans.ts'
 import {GPUUtils} from './utils/gpu.ts'
 import {Ops} from './utils/ops.ts'
 import {Random} from './utils/rng.ts'
@@ -18,7 +18,6 @@ export default async function init(
   let M = 1000;
   let N = 2;
   let K = 16;
-  
   
   let data = new Float32Array(M*N);
   for(let i = 0 ; i < M*N ; i++) {
@@ -79,37 +78,37 @@ export default async function init(
   const means = await GPUUtils.writeToCPU(device, meansBufferTranspose, K*4*N, false);
   const meansArray = Array.from(new Float32Array(means.buffer));
 
-  const centroidsTrace = {
-    x: meansArray.slice(0, K),
-    y: meansArray.slice(K, 2 * K),
-    mode: 'markers',
-    marker: {
-      color: 'red',
-      symbol: 'x',
-      size: 12,
-    },
-    type: 'scatter',
-  };
+  // const centroidsTrace = {
+  //   x: meansArray.slice(0, K),
+  //   y: meansArray.slice(K, 2 * K),
+  //   mode: 'markers',
+  //   marker: {
+  //     color: 'red',
+  //     symbol: 'x',
+  //     size: 12,
+  //   },
+  //   type: 'scatter',
+  // };
   
 
-  const trace = {
-    x: dataArray.slice(0, M),
-    y: dataArray.slice(M, 2 * M),
-    mode: 'markers',
-    marker: {
-      color: segmentIdsArray,
-      colorscale: 'Viridis',
-      size: 10,
-    },
-    type: 'scatter',
-  };
+  // const trace = {
+  //   x: dataArray.slice(0, M),
+  //   y: dataArray.slice(M, 2 * M),
+  //   mode: 'markers',
+  //   marker: {
+  //     color: segmentIdsArray,
+  //     colorscale: 'Viridis',
+  //     size: 10,
+  //   },
+  //   type: 'scatter',
+  // };
 
-  const layout = {
-    title: 'Scatter plot of data points',
-    xaxis: { title: 'X' },
-    yaxis: { title: 'Y' },
-  };
+  // const layout = {
+  //   title: 'Scatter plot of data points',
+  //   xaxis: { title: 'X' },
+  //   yaxis: { title: 'Y' },
+  // };
 
-  Plotly.newPlot('test', [trace, centroidsTrace], layout);
+  // Plotly.newPlot('test', [trace, centroidsTrace], layout);
 
 }
