@@ -201,6 +201,10 @@ export class UniformShader implements ShaderEncoder {
     }
 
     encode(pass: GPUComputePassEncoder) {
+        if (!this.isSetup) {
+            throw new Error("Shader not setup");
+        }
+
         this.threeFryShader.encode(pass);
 
         pass.setPipeline(this.pipeline);
@@ -210,181 +214,170 @@ export class UniformShader implements ShaderEncoder {
     }
 }
 
-// export class NormalShader implements ShaderEncoder {
-//     readonly length: number;
-//     readonly bufferLength: number;
-//     nTPB: number;
+export class NormalShader implements ShaderEncoder {
+    readonly length: number;
+    readonly bufferLength: number;
+    nTPB: number;
 
-//     rngBuffer: GPUBuffer;
-//     lengthBuffer: GPUBuffer;
-//     outputBuffer: GPUBuffer;
+    seedUniformBuffer: GPUBuffer;
+    lengthUniformBuffer: GPUBuffer;
+    rngBuffer: GPUBuffer;
+    outputBuffer: GPUBuffer;
 
-//     bindGroup_1: GPUBindGroup;
-//     pipeline_1: GPUComputePipeline;
-//     bindGroupLayout_2: GPUBindGroupLayout;
-//     bindGroup_2: GPUBindGroup;
-//     pipeline_2: GPUComputePipeline;
+    pipeline: GPUComputePipeline;
+    bindGroup: GPUBindGroup;
+    threeFryShader: ThreeFryShader;
 
-//     constructor(length: number, nTPB: number=32) {
-//         this.length = length
-//         this.bufferLength = Math.ceil(length / 4);
-//         this.nTPB = nTPB;
-//     }
+    isSetup: boolean = false;
 
-//     async setup(device: GPUDevice, seedBuffer:GPUBuffer, outputBuffer:GPUBuffer) {
-//         let rngBuffer = this.rngBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.bufferLength));
+    constructor(length: number, nTPB: number=32) {
+        this.length = length
+        this.bufferLength = Math.ceil(length / 4)*4;
+        this.nTPB = nTPB;
 
-//         this.bindGroupLayout_1 = device.createBindGroupLayout({
-//             label: "ThreeFry BGL",
-//             entries: [
-//                 {
-//                     binding: 0,
-//                     visibility: GPUShaderStage.COMPUTE,
-//                     buffer: {
-//                         type: 'uniform'
-//                     }
-//                 },
-//                 {
-//                     binding: 1,
-//                     visibility: GPUShaderStage.COMPUTE,
-//                     buffer: {
-//                         type: 'uniform'
-//                     }
-//                 },
-//                 {
-//                     binding: 2,
-//                     visibility: GPUShaderStage.COMPUTE,
-//                     buffer: {
-//                         type: 'storage'
-//                     }
-//                 }
-//             ]
-//         });
+        this.threeFryShader = new ThreeFryShader(this.bufferLength);
+    }
 
-//         this.bindGroup_1 = device.createBindGroup({
-//             layout: this.bindGroupLayout_1,
-//             entries: [
-//                 {
-//                     binding: 0,
-//                     resource: {
-//                         buffer: seedBuffer
-//                     }
-//                 },
-//                 {
-//                     binding: 1,
-//                     resource: {
-//                         buffer: nBuffer
-//                     }
-//                 },
-//                 {
-//                     binding: 2,
-//                     resource: {
-//                         buffer: rngBuffer
-//                     }
-//                 }
-//             ]
-//         });
+    async setup(device: GPUDevice, seedUniformBuffer:GPUBuffer, outputBuffer:GPUBuffer) {
+        this.seedUniformBuffer = seedUniformBuffer;
+        this.lengthUniformBuffer = GPUUtils.createUniform(device, new Float32Array([this.length]));
+        this.rngBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.bufferLength));
+        this.outputBuffer = outputBuffer;
 
-//         const pipelineLayout_1 = device.createPipelineLayout({
-//             bindGroupLayouts: [this.bindGroupLayout_1]
-//         });
 
-//         const threeFryShader = device.createShaderModule({
-//             code: ThreeFryCode
-//         })
-//         this.pipeline_1 = device.createComputePipeline({
-//             layout: pipelineLayout_1,
-//             compute: {
-//                 module: threeFryShader,
-//                 entryPoint: "threefry",
-//                 constants: {
-//                     nTPB: 16,
-//                 }
-//             } 
-//         })
+        const bindGroupLayout = device.createBindGroupLayout({
+            label: "BoxMuller BGL",
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'uniform'
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'read-only-storage'
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'storage'
+                    }
+                }
+            ]
+        });
 
-//         this.bindGroupLayout_2 = device.createBindGroupLayout({
-//             label: "BoxMuller BGL",
-//             entries: [
-//                 {
-//                     binding: 0,
-//                     visibility: GPUShaderStage.COMPUTE,
-//                     buffer: {
-//                         type: 'uniform'
-//                     }
-//                 },
-//                 {
-//                     binding: 1,
-//                     visibility: GPUShaderStage.COMPUTE,
-//                     buffer: {
-//                         type: 'read-only-storage'
-//                     }
-//                 },
-//                 {
-//                     binding: 2,
-//                     visibility: GPUShaderStage.COMPUTE,
-//                     buffer: {
-//                         type: 'storage'
-//                     }
-//                 }
-//             ]
-//         });
+        this.bindGroup = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.lengthUniformBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.rngBuffer
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.outputBuffer
+                    }
+                }
+            ]
+        });
 
-//         this.bindGroup_2 = device.createBindGroup({
-//             layout: this.bindGroupLayout_2,
-//             entries: [
-//                 {
-//                     binding: 0,
-//                     resource: {
-//                         buffer: nBuffer
-//                     }
-//                 },
-//                 {
-//                     binding: 1,
-//                     resource: {
-//                         buffer: rngBuffer
-//                     }
-//                 },
-//                 {
-//                     binding: 2,
-//                     resource: {
-//                         buffer: outputBuffer
-//                     }
-//                 }
-//             ]
-//         });
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        });
 
-//         const pipelineLayout_2 = device.createPipelineLayout({
-//             bindGroupLayouts: [this.bindGroupLayout_2]
-//         });
+        const boxMullerShader = device.createShaderModule({
+            code: BoxMullerCode
+        })
 
-//         const boxMullerShader = device.createShaderModule({
-//             code: BoxMullerCode
-//         })
-//         this.pipeline_2 = device.createComputePipeline({
-//             layout: pipelineLayout_2,
-//             compute: {
-//                 module: boxMullerShader,
-//                 entryPoint: "boxmuller",
-//                 constants: {
-//                     nTPB: 16,
-//                 }
-//             } 
-//         });
+        this.pipeline = device.createComputePipeline({
+            layout: pipelineLayout,
+            compute: {
+                module: boxMullerShader,
+                entryPoint: "boxmuller",
+                constants: {
+                    nTPB: this.nTPB,
+                }
+            } 
+        });
 
-//     }
+        await this.threeFryShader.setup(device, seedUniformBuffer, this.rngBuffer);
+        this.isSetup = true;
+    }
 
-//     // BUG: If 2^n +2, then last two entries are 0???
-//     encode(pass:GPUComputePassEncoder) {
-//         pass.setPipeline(this.pipeline_1);
-//         pass.setBindGroup(0, this.bindGroup_1);
-//         pass.dispatchWorkgroups(Math.ceil(this.length/this.nTPB),1,1);
+    encode(pass:GPUComputePassEncoder) {
+        if (!this.isSetup) {
+            throw new Error("Shader not setup");
+        }
 
-//         pass.setPipeline(this.pipeline_2);
-//         pass.setBindGroup(0, this.bindGroup_2);
-//         pass.dispatchWorkgroups(Math.ceil(this.length/this.nTPB),1,1);
-//     }
-// }
+        this.threeFryShader.encode(pass);
+
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.bindGroup);
+        pass.dispatchWorkgroups(Math.ceil(this.length / this.nTPB),1,1);
+    }
+}
+
+export class CategoricalShader implements ShaderEncoder {
+    readonly N: number
+    readonly K: number
+    isSerial: boolean
+    nTPB: number
+
+    seedUniformBuffer: GPUBuffer
+    lengthUniformBuffer: GPUBuffer
+    logprobsBuffer: GPUBuffer
+    rngBuffer: GPUBuffer
+    outputBuffer: GPUBuffer
+
+    pipeline: GPUComputePipeline
+    bindGroup: GPUBindGroup
+    uniformShader: UniformShader
+
+    isSetup: boolean = false;
+
+    constructor(N: number, num_labels: number, isSerial: boolean = true, nTPB: number = 32) {
+        this.N = N;
+        this.K = num_labels
+        this.isSerial = isSerial
+        this.nTPB = nTPB;
+        this.uniformShader = new UniformShader(this.N*this.K);
+    }
+
+    async setup(device: GPUDevice, seedUniformBuffer: GPUBuffer, logprobsBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
+        this.seedUniformBuffer = seedUniformBuffer;
+        this.lengthUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.N, this.K]));
+        this.logprobsBuffer = logprobsBuffer;
+        this.rngBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.N * this.K));
+        this.outputBuffer = outputBuffer;
+
+        await this.uniformShader.setup(device, seedUniformBuffer, this.rngBuffer)
+
+        this.isSetup = true;
+    }
+
+    encode(pass: GPUComputePassEncoder) {
+        if (!this.isSetup) {
+            throw new Error("Shader not setup");
+        }
+        this.uniformShader.encode(pass);
+    }
+
+}
 
 
 }

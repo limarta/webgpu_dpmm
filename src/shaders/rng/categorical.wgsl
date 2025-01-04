@@ -1,8 +1,7 @@
-@group(0) @binding(0) var<uniform> N: u32; // number of samples
-@group(0) @binding(1) var<uniform> K: u32; // number of categories
-@group(0) @binding(2) var<storage> rng: array<f32>; // N*K random numbers
-@group(0) @binding(3) var<storage> logp: array<f32>; // K log probabilities
-@group(0) @binding(4) var<storage, read_write> output: array<u32>;
+@group(0) @binding(0) var<uniform> dims: vec2u; // number of samples
+@group(0) @binding(1) var<storage> rng: array<f32>; // N*K random numbers
+@group(0) @binding(2) var<storage> logp: array<f32>; // K log probabilities
+@group(0) @binding(3) var<storage, read_write> output: array<u32>;
 
 override nTPB: u32 = 16;
 
