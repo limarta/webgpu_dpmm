@@ -475,6 +475,99 @@ export class CategoricalShader implements ShaderEncoder {
 
 }
 
+export class GammaShader implements ShaderEncoder {
+    N: number;
+    shape: number;
+    scale: number;
+    nTPB: number;
+
+    normalShader: NormalShader;
+    uniformShader: UniformShader;
+
+    constructor(N: number, shape: number, scale: number, nTPB: number = 32) {
+        this.N = N;
+        this.shape = shape;
+        this.scale = scale;
+        this.nTPB = nTPB;
+
+        this.normalShader = new NormalShader(this.N);
+        this.uniformShader = new UniformShader(this.N);
+    }
+
+    async setup(device: GPUDevice) {
+        throw new Error("Method not implemented.");
+    }
+
+    encode(pass: GPUComputePassEncoder): void {
+        throw new Error("Method not implemented.");
+    }
+}
+
+export class GaussianMixtureModelShader implements ShaderEncoder {
+    M: number;
+    N: number;
+    K: number;
+    nTPB: number;
+
+    dimensionsBuffer: GPUBuffer;
+    seedUniformBuffer: GPUBuffer;
+    proportionBuffer: GPUBuffer;
+    meanBuffer: GPUBuffer;
+    covarianceBuffer: GPUBuffer;
+    outputBuffer: GPUBuffer;
+    assignmentBuffer: GPUBuffer;
+
+    normalShader: NormalShader;
+    categoricalShader: CategoricalShader;
+
+    isSetup: boolean = false;
+
+    /**
+     * 
+     * @param M - Number of samples
+     * @param N - Number of dimensions
+     * @param K  - Number of components
+     * @param nTPB - Number of threads per block
+     */
+    constructor(M: number, N: number, K: number, nTPB: number = 32) {
+        this.M = M;
+        this.N = N;
+        this.K = K;
+        this.nTPB = nTPB;
+
+        this.categoricalShader = new CategoricalShader(this.M, this.K);
+        // this.normalShader = new NormalShader(this.N * this.D);
+    }
+
+    async setup(
+        device: GPUDevice, 
+        seedUniformBuffer: GPUBuffer, 
+        proportionBuffer: GPUBuffer,
+        meanBuffer: GPUBuffer, 
+        covarianceBuffer: GPUBuffer, 
+        outputBuffer: GPUBuffer, 
+        assignmentBuffer: GPUBuffer, 
+    ) {
+
+        this.seedUniformBuffer = seedUniformBuffer;
+        this.proportionBuffer = proportionBuffer;
+        this.meanBuffer = meanBuffer;
+        this.covarianceBuffer = covarianceBuffer;
+        this.outputBuffer = outputBuffer;
+        this.assignmentBuffer = assignmentBuffer;
+
+        await this.categoricalShader.setup(device, seedUniformBuffer, proportionBuffer, assignmentBuffer);
+        this.isSetup = true;
+    }
+
+    encode(pass: GPUComputePassEncoder): void {
+        if (!this.isSetup) {
+            throw new Error("Gaussian Mixture Model shader not setup");
+        }
+        this.categoricalShader.encode(pass);
+    }
+}
+
 
 }
 
