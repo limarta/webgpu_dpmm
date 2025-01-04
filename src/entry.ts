@@ -15,10 +15,35 @@ export default async function init(
     alphaMode: 'opaque',
   });
 
-  // let M = 1000;
-  // let N = 2;
-  // let K = 8;
+  let M = 10;
+  let N = 2;
+  let K = 4;
   
+  let seedUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([0, 0, 0, 0]));
+  let proportionsBuffer = GPUUtils.createStorageBuffer(device, new Float32Array([0.1, 0.2, 0.3, 0.4]));
+  let assignmentBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(M));
+  let outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M*N));
+
+  const gmmShader = new Random.GaussianMixtureModelShader(M, N, K);
+  await gmmShader.setup(
+    device,
+    seedUniformBuffer,
+    proportionsBuffer,
+    null,
+    null,
+    outputBuffer,
+    assignmentBuffer
+  )
+  
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginComputePass();
+
+  gmmShader.encode(pass);
+  pass.end();
+  device.queue.submit([encoder.finish()]);
+
+  await GPUUtils.log(device, gmmShader.assignmentBuffer, true);
+
   // let data = new Float32Array(M*N);
   // for(let i = 0 ; i < M*N ; i++) {
   //   data[i] = Math.random();

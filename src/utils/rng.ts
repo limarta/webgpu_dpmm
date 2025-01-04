@@ -216,7 +216,7 @@ export class UniformShader implements ShaderEncoder {
 }
 
 export class NormalShader implements ShaderEncoder {
-    readonly length: number;
+    readonly N: number;
     readonly bufferLength: number;
     nTPB: number;
 
@@ -231,17 +231,18 @@ export class NormalShader implements ShaderEncoder {
 
     isSetup: boolean = false;
 
-    constructor(length: number, nTPB: number=32) {
-        this.length = length
-        this.bufferLength = Math.ceil(length / 4)*4;
+    constructor(N: number, nTPB: number=32) {
+        this.N = N;
+        this.bufferLength = Math.ceil(N / 4)*4;
         this.nTPB = nTPB;
 
         this.threeFryShader = new ThreeFryShader(this.bufferLength);
     }
 
     async setup(device: GPUDevice, seedUniformBuffer:GPUBuffer, outputBuffer:GPUBuffer) {
+
         this.seedUniformBuffer = seedUniformBuffer;
-        this.lengthUniformBuffer = GPUUtils.createUniform(device, new Float32Array([this.length]));
+        this.lengthUniformBuffer = GPUUtils.createUniform(device, new Float32Array([this.N]));
         this.rngBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.bufferLength));
         this.outputBuffer = outputBuffer;
 
@@ -329,7 +330,7 @@ export class NormalShader implements ShaderEncoder {
 
         pass.setPipeline(this.pipeline);
         pass.setBindGroup(0, this.bindGroup);
-        pass.dispatchWorkgroups(Math.ceil(this.length / this.nTPB),1,1);
+        pass.dispatchWorkgroups(Math.ceil(this.N / this.nTPB),1,1);
     }
 }
 
@@ -360,6 +361,14 @@ export class CategoricalShader implements ShaderEncoder {
     }
 
     async setup(device: GPUDevice, seedUniformBuffer: GPUBuffer, logprobsBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
+        if (logprobsBuffer.size /4 !== this.K ) {
+            throw new Error(`logprobsBuffer size must be euqal to ${this.K}, but got ${logprobsBuffer.size /4 }`);
+        }
+
+        if (outputBuffer.size /4 !== this.N ) {
+            throw new Error(`outputBuffer size must be euqal to ${this.N}, but got ${outputBuffer.size /4 }`);
+        }
+
         this.seedUniformBuffer = seedUniformBuffer;
         this.lengthUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.N, this.K]));
         this.logprobsBuffer = logprobsBuffer;
