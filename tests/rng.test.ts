@@ -33,7 +33,7 @@ test('uniform', async () => {
         const M = 100000;
         const seed = new Uint32Array([0,0,0,t])
 
-        const seedUniformBuffer = GPUUtils.createUniform(device, seed);
+        const seedUniformBuffer = GPUUtils.createStorageBuffer(device, seed);
         const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M));
 
         const shader = new Random.UniformShader(M)
@@ -64,7 +64,7 @@ test('normal', async () => {
         const M = 1000000;
         const seed = new Uint32Array([0,0,0,t])
 
-        const seedUniformBuffer = GPUUtils.createUniform(device, seed);
+        const seedUniformBuffer = GPUUtils.createStorageBuffer(device, seed);
         const outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M));
 
         const shader = new Random.NormalShader(M)
@@ -112,7 +112,7 @@ test('categorical', async () => {
     }
   
     let seed = new Uint32Array([0,0,0,0]);
-    const seedUniformBuffer = GPUUtils.createUniform(device, seed);
+    const seedUniformBuffer = GPUUtils.createStorageBuffer(device, seed);
     const logprobsBuffer = GPUUtils.createStorageBuffer(device, logprobs);
     const outputBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(M));
   
@@ -141,3 +141,7 @@ test('categorical', async () => {
     expect(labels[3]).toBeGreaterThan(0.4-0.05);
     expect(labels[3]).toBeLessThan(0.4+0.05);
 })
+
+// test('gamma', async() => {
+    
+// });

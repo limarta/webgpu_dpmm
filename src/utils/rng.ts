@@ -28,12 +28,13 @@ export class ThreeFryShader implements ShaderEncoder {
         this.outputBuffer = outputBuffer;
 
         const bindGroupLayout = device.createBindGroupLayout({
+            label: "ThreeFry BGL",
             entries: [
                 {
                     binding: 0,
                     visibility: GPUShaderStage.COMPUTE,
                     buffer: {
-                        type: "uniform"
+                        type: "read-only-storage"
                     }
                 },
                 {
@@ -54,6 +55,7 @@ export class ThreeFryShader implements ShaderEncoder {
         });
     
         this.bindGroup = device.createBindGroup({
+            label: "ThreeFry BG",
             layout: bindGroupLayout,
             entries: [
                 {
@@ -133,6 +135,7 @@ export class UniformShader implements ShaderEncoder {
         this.outputBuffer = outputBuffer
 
         const bindGroupLayout = device.createBindGroupLayout({
+            label: "Uniform BGL",
             entries: [
                 {
                     binding: 0,
@@ -159,6 +162,7 @@ export class UniformShader implements ShaderEncoder {
         });
     
         this.bindGroup = device.createBindGroup({
+            label: "Uniform BG",
             layout: bindGroupLayout,
             entries: [
                 {
@@ -275,6 +279,7 @@ export class NormalShader implements ShaderEncoder {
         });
 
         this.bindGroup = device.createBindGroup({
+            label: "BoxMuller BG",
             layout: bindGroupLayout,
             entries: [
                 {
@@ -376,6 +381,7 @@ export class CategoricalShader implements ShaderEncoder {
         this.outputBuffer = outputBuffer;
 
         let bindGroupGroupLayout = device.createBindGroupLayout({
+            label: "Categorical BGL",
             entries: [
                 {
                     binding: 0,
@@ -409,6 +415,7 @@ export class CategoricalShader implements ShaderEncoder {
         });
 
         this.bindGroup = device.createBindGroup({
+            label: "Categorical BG",
             layout: bindGroupGroupLayout,
             entries: [
                 {

@@ -1,5 +1,5 @@
 // https://dl.acm.org/doi/10.1145/2063384.2063405
-@group(0) @binding(0) var<uniform> key: vec4<u32>;
+@group(0) @binding(0) var<storage> key: vec4<u32>;
 @group(0) @binding(1) var<uniform> N: u32;
 @group(0) @binding(2) var<storage,read_write> rng: array<vec4u>;
 
