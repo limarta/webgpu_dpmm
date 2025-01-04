@@ -70,4 +70,28 @@ class KMeansShader implements ShaderEncoder {
 
 }
 
-export {KMeansShader}
+async function kmeans(device: GPUDevice, M: number, N: number, K: number, data, segmentIds) {
+  const dataBuffer = GPUUtils.createStorageBuffer(device, data);
+  const segmentIdsBuffer = GPUUtils.createStorageBuffer(device, segmentIds);
+
+  const shader = new KMeansShader(M, N, K)
+  await shader.setup(device, dataBuffer, segmentIdsBuffer);
+
+  for(let i = 0 ; i < 200 ; i++) {
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginComputePass();
+    shader.encode(pass);
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+  }
+
+  const segmentIdsArray = Array.from(await GPUUtils.writeToCPU(device, segmentIdsBuffer, M*4, true));
+  const means = await GPUUtils.writeToCPU(device, shader.meansBufferTranspose, K*4*N, false);
+  const meansArray = Array.from(new Float32Array(means.buffer));
+  return {
+    segmentIds: segmentIdsArray,
+    means: meansArray
+  }
+}
+
+export {KMeansShader, kmeans}
