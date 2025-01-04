@@ -1,6 +1,7 @@
 import ThreeFryCode from '../shaders/rng/threefry.wgsl';
 import BoxMullerCode from '../shaders/rng/boxmuller.wgsl';
 import UniformCode from '../shaders/rng/uniform.wgsl';
+import CategoricalCode from '../shaders/rng/categorical.wgsl';
 import {GPUUtils} from './gpu.ts';
 import {ShaderEncoder} from './shader.ts';
 
@@ -365,6 +366,88 @@ export class CategoricalShader implements ShaderEncoder {
         this.rngBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.N * this.K));
         this.outputBuffer = outputBuffer;
 
+        let bindGroupGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "uniform"
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "storage"
+                    }
+                }
+            ]
+        });
+
+        this.bindGroup = device.createBindGroup({
+            layout: bindGroupGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.lengthUniformBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.rngBuffer
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.logprobsBuffer
+                    }
+                },
+                {
+                    binding: 3,
+                    resource: {
+                        buffer: this.outputBuffer
+                    }
+                }
+            ]
+        });
+
+        let pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupGroupLayout]
+        });
+        let shaderModule = device.createShaderModule({
+            code: CategoricalCode
+        });
+
+        this.pipeline = device.createComputePipeline({
+            layout: pipelineLayout,
+            compute: {
+                module: shaderModule,
+                entryPoint: "main",
+                constants: {
+                    nTPB: this.nTPB,
+                }
+            }
+        });
+
+
         await this.uniformShader.setup(device, seedUniformBuffer, this.rngBuffer)
 
         this.isSetup = true;
@@ -375,6 +458,10 @@ export class CategoricalShader implements ShaderEncoder {
             throw new Error("Shader not setup");
         }
         this.uniformShader.encode(pass);
+
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.bindGroup);
+        pass.dispatchWorkgroups(Math.ceil(this.N / this.nTPB),1,1)
     }
 
 }

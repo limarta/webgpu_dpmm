@@ -103,5 +103,41 @@ test('normal', async () => {
     }
 })
 
-// test('categorical', async () => {
-// })
+test('categorical', async () => {
+    let M = 10000;
+    let K  = 4;
+    let logprobs = new Float32Array([0.1, 0.2, 0.3, 0.4]);
+    for(let i = 0 ; i < K ; i++) {
+      logprobs[i] = Math.log(logprobs[i]); 
+    }
+  
+    let seed = new Uint32Array([0,0,0,0]);
+    const seedUniformBuffer = GPUUtils.createUniform(device, seed);
+    const logprobsBuffer = GPUUtils.createStorageBuffer(device, logprobs);
+    const outputBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(M));
+  
+    const shader = new Random.CategoricalShader(M, K);
+    await shader.setup(device, seedUniformBuffer, logprobsBuffer, outputBuffer);
+  
+    createPass([shader]);
+  
+    const output = await GPUUtils.writeToCPU(device, outputBuffer, M*4, true);
+    let labels = new Float32Array(K);
+    for(let i = 0 ; i < M ; i++) {
+      labels[output[i]]++;
+    }
+    for(let i = 0 ; i < K ; i++) {
+      labels[i] = labels[i] / M;
+    }
+    expect(labels[0]).toBeGreaterThan(0.1-0.05);
+    expect(labels[0]).toBeLessThan(0.1+0.05);
+
+    expect(labels[1]).toBeGreaterThan(0.2-0.05);
+    expect(labels[1]).toBeLessThan(0.2+0.05);
+
+    expect(labels[2]).toBeGreaterThan(0.3-0.05);
+    expect(labels[2]).toBeLessThan(0.3+0.05);
+
+    expect(labels[3]).toBeGreaterThan(0.4-0.05);
+    expect(labels[3]).toBeLessThan(0.4+0.05);
+})
