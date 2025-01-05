@@ -49,6 +49,7 @@ export class TransposeShader implements ShaderEncoder {
         this.inputBuffer = inputBuffer;
         this.outputBuffer = outputBuffer;
         this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M, this.N]));
+
         const bindGroupLayout = device.createBindGroupLayout({
             entries: [
                 {
@@ -126,6 +127,10 @@ export class TransposeShader implements ShaderEncoder {
         let MAX_BLOCKS_X = Math.ceil(this.M/TransposeShader.nTPB);
         let MAX_BLOCKS_Y = Math.ceil(this.N/TransposeShader.nTPB);
         pass.dispatchWorkgroups(MAX_BLOCKS_X, MAX_BLOCKS_Y, 1)
+    }
+
+    destroy() {
+        this.dimsUniformBuffer.destroy();
     }
 }
 
@@ -267,6 +272,10 @@ export class MatVecElementwiseShader implements ShaderEncoder {
         pass.setPipeline(this.pipeline);
         pass.setBindGroup(0, this.bindGroup);
         pass.dispatchWorkgroups(Math.ceil(this.M * this.N / this.nTPB), 1);
+    }
+
+    destroy() {
+        this.dimsUniformBuffer.destroy();
     }
 
 }
@@ -585,6 +594,12 @@ export class Sum2DShader implements ShaderEncoder {
         }
         pass.dispatchWorkgroups(1, this.N)
     }
+
+    destroy() {
+        this.dimensionUniformBuffer.destroy();
+        this.scratchBuffer_1.destroy();
+        this.scratchBuffer_2.destroy();
+    }
 }
 
 export class UnsortedSegmentSumShader implements ShaderEncoder {
@@ -735,6 +750,13 @@ export class UnsortedSegmentSumShader implements ShaderEncoder {
         pass.setBindGroup(0, this.bindGroup);
         pass.dispatchWorkgroups(this.N_intermediate, this.num_segments, 1);
         this.sum2DShader.encode(pass);
+    }
+
+    destroy() {
+        this.dimsUniformBuffer.destroy();
+        this.segmentCountUniformBuffer.destroy();
+        this.scratchBuffer.destroy();
+        this.sum2DShader.destroy();
     }
 }
 
@@ -1043,6 +1065,12 @@ export class Sum3DShader implements ShaderEncoder {
         pass.dispatchWorkgroups(1, this.N, this.K)
 
     }
+
+    destroy() {
+        this.dimensionUniformBuffer.destroy();
+        this.scratchBuffer_1.destroy();
+        this.scratchBuffer_2.destroy();
+    }
 }
 
 /**
@@ -1202,6 +1230,12 @@ export class UnsortedSegmentSum2DShader implements ShaderEncoder {
         pass.dispatchWorkgroups(this.M_intermediate, this.N, this.num_segments);
         this.sum3DShader.encode(pass);
     }
+
+    destroy() {
+        this.dimsUniformBuffer.destroy();
+        this.scratchBuffer.destroy();
+        this.sum3DShader.destroy();
+    }
 }
 
 export class CountShader implements ShaderEncoder {
@@ -1245,6 +1279,12 @@ export class CountShader implements ShaderEncoder {
         }
         this.unsortedSegmentSumShader.encode(pass);
     }
+
+    destroy() {
+        this.onesBuffer.destroy();
+        this.dimsUniformBuffer.destroy();
+        this.unsortedSegmentSumShader.destroy();
+    }
 }
 
 export class ScaleAndShiftIndexed2DShader implements ShaderEncoder {
@@ -1282,7 +1322,7 @@ export class ScaleAndShiftIndexed2DShader implements ShaderEncoder {
         this.assignmentBuffer = assignmentGPUBuffer;
         this.scaleBuffer = scaleBuffer;
         this.shiftBuffer = shiftBuffer;
-        this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M1, this.K, this.M2, this.K]));
+        this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M1, this.M2, this.K]));
 
 
         let bindGroupLayout = device.createBindGroupLayout({
@@ -1387,6 +1427,10 @@ export class ScaleAndShiftIndexed2DShader implements ShaderEncoder {
         pass.setPipeline(this.pipeline);
         pass.setBindGroup(0, this.bindGroup);
         pass.dispatchWorkgroups(Math.ceil(this.M1/this.nTPB), this.M2)
+    }
+
+    destroy() {
+        this.dimsUniformBuffer.destroy();
     }
 }
 
@@ -1528,6 +1572,10 @@ export class ClosestPairwiseLoopShader implements ShaderEncoder {
         pass.setPipeline(this.pipeline);
         pass.setBindGroup(0, this.bindGroup);
         pass.dispatchWorkgroups(this.MAX_BLOCKS_X,1,1)
+    }
+
+    destroy() {
+        this.dimensionUniformBuffer.destroy();
     }
 }
 

@@ -34,7 +34,7 @@ class GaussianMixtureModelShader implements ShaderEncoder {
      * 
      * @param M - Number of samples
      * @param N - Number of dimensions
-     * @param K  - Number of components
+     * @param K  - Number of clusters
      * @param nTPB - Number of threads per block
      */
     constructor(M: number, N: number, K: number, nTPB: number = 32) {
@@ -47,7 +47,7 @@ class GaussianMixtureModelShader implements ShaderEncoder {
         this.copyShader1 = new Random.CopyKeyShader(0);
         this.copyShader2 = new Random.CopyKeyShader(1);
         this.categoricalShader = new Random.CategoricalShader(this.M, this.K);
-        this.scaleAndShiftShader = new Ops.ScaleAndShiftIndexed2DShader(this.M, this.N, this.K);
+        this.scaleAndShiftShader = new Ops.ScaleAndShiftIndexed2DShader(this.M, this.K, this.N); // Here K and N are swapped
         this.normalShader = new Random.NormalShader(this.K * this.M);
     }
 
@@ -117,7 +117,19 @@ class GaussianMixtureModelShader implements ShaderEncoder {
         this.categoricalShader.encode(pass);
         this.normalShader.encode(pass);
         this.scaleAndShiftShader.encode(pass);
+
     }
+
+    destroy() {
+        this.threeFryShader.destroy();
+        this.copyShader1.destroy();
+        this.copyShader2.destroy();
+        this.categoricalShader.destroy();
+        this.normalShader.destroy();
+        this.scaleAndShiftShader.destroy(); 
+    }
+
+
 }
 
 export {GaussianMixtureModelShader};

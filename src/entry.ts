@@ -54,8 +54,6 @@ export default async function init(
 
   let assignments = await GPUUtils.writeToCPU(device, gmmShader.assignmentBuffer, M * 4);
   let data = await GPUUtils.writeToCPU(device, gmmShader.outputBuffer, M * N * 4, false);
-  console.log(assignments);
-  console.log(data)
   // console.log(data.slice(0, M))
   // console.log(data.slice(M, 2*M))
 

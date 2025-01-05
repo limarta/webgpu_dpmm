@@ -383,8 +383,6 @@ test('scale_and_shift_basic', async() => {
     createPass([scaleAndShiftShader]);
     await device.queue.onSubmittedWorkDone();
     let output = await GPUUtils.writeToCPU(device, scaleAndShiftShader.dataBuffer, M1*K*4, false);
-    console.log(output)
-    console.log(expected)
     
     expect(output).toEqual(expected);
 });

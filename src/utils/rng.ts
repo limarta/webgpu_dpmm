@@ -103,6 +103,10 @@ export class ThreeFryShader implements ShaderEncoder {
         let N_workgroups = Math.ceil(this.N / this.nTPB);
         pass.dispatchWorkgroups(N_workgroups,1,1);
     }
+    
+    destroy() {
+        this.lengthBuffer.destroy();
+    }
 }
 
 export class CopyKeyShader implements ShaderEncoder {
@@ -115,6 +119,9 @@ export class CopyKeyShader implements ShaderEncoder {
 
     bindGroup: GPUBindGroup;
     pipeline: GPUComputePipeline;
+
+    isSetup: boolean = false;
+
     constructor(index: number) {
         this.index = index;
     }
@@ -194,12 +201,22 @@ export class CopyKeyShader implements ShaderEncoder {
                 entryPoint: "main",
             }
         });
+
+        this.isSetup = true;
     }
 
     encode(pass:GPUComputePassEncoder) {
+        if (!this.isSetup) {
+            throw new Error("Shader not setup");
+        }
+
         pass.setPipeline(this.pipeline);
         pass.setBindGroup(0, this.bindGroup);
         pass.dispatchWorkgroups(1,1,1);
+    }
+
+    destroy() {
+        this.indexUniformBuffer.destroy();
     }
 }
 
@@ -320,6 +337,12 @@ export class UniformShader implements ShaderEncoder {
         let N_workgroups = Math.ceil(this.N/this.nTPB);
         pass.dispatchWorkgroups(N_workgroups,1,1);
     }
+
+    destroy() {
+        this.lengthBuffer.destroy();
+        this.rngBuffer.destroy();
+        this.threeFryShader.destroy();
+    }
 }
 
 export class NormalShader implements ShaderEncoder {
@@ -439,6 +462,12 @@ export class NormalShader implements ShaderEncoder {
         pass.setPipeline(this.pipeline);
         pass.setBindGroup(0, this.bindGroup);
         pass.dispatchWorkgroups(Math.ceil(this.N / this.nTPB),1,1);
+    }
+
+    destroy() {
+        this.lengthUniformBuffer.destroy();
+        this.rngBuffer.destroy();
+        this.threeFryShader.destroy();
     }
 }
 
@@ -583,6 +612,12 @@ export class CategoricalShader implements ShaderEncoder {
         pass.dispatchWorkgroups(Math.ceil(this.N / this.nTPB),1,1)
     }
 
+    destroy() {
+        this.lengthUniformBuffer.destroy();
+        this.uniformSamplesBuffer.destroy();
+        this.uniformShader.destroy();
+    }
+
 }
 
 export class GammaShader implements ShaderEncoder {
@@ -611,6 +646,11 @@ export class GammaShader implements ShaderEncoder {
     encode(pass: GPUComputePassEncoder): void {
         throw new Error("Method not implemented.");
     }
+
+    destroy() {
+        throw new Error("Method not implemented.");
+    }
+
 }
 
 
