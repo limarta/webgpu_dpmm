@@ -342,3 +342,49 @@ test('count_1', async() => {
         expect(output).toEqual(expected);
     }
 });
+
+test('scale_and_shift_basic', async() => {
+    let M1 = 5
+    let M2 = 3
+    let K = 2
+    let data = new Float32Array([
+        1, 2, 3, 4, 5,
+        6, 7, 8, 9, 10
+    ])
+    let assignments = new Uint32Array([0, 0, 1, 1, 2]);
+    let means = new Float32Array([
+    1, 100, 3000,
+    5, 200, 4000
+    ])
+    let sigmas = new Float32Array([
+    1, 1, 1,
+    1, 1, 1
+    ]);
+
+    let expected = new Float32Array([
+    2, 3, 103, 104, 3005,
+    11, 12, 208, 209, 4010
+    ])
+
+    let dataBuffer = GPUUtils.createStorageBuffer(device, data);
+    let assignmentBuffer = GPUUtils.createStorageBuffer(device, assignments);
+    let meansBuffer = GPUUtils.createStorageBuffer(device, means);  
+    let sigmasBuffer = GPUUtils.createStorageBuffer(device, sigmas);
+
+    const scaleAndShiftShader = new Ops.ScaleAndShiftIndexed2DShader(M1, M2, K);
+    await scaleAndShiftShader.setup(
+    device,
+    dataBuffer,
+    assignmentBuffer,
+    sigmasBuffer,
+    meansBuffer,
+    )
+
+    createPass([scaleAndShiftShader]);
+    await device.queue.onSubmittedWorkDone();
+    let output = await GPUUtils.writeToCPU(device, scaleAndShiftShader.dataBuffer, M1*K*4, false);
+    console.log(output)
+    console.log(expected)
+    
+    expect(output).toEqual(expected);
+});

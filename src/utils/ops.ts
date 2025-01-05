@@ -1,3 +1,4 @@
+import ScaleAndShiftIndexed2DCode from '../shaders/algebra/scale_and_shift_indexed_2d.wgsl';
 import TransposeCode from '../shaders/algebra/transpose.wgsl';
 import MatVecElementwiseCode from '../shaders/algebra/mat_vec_elementwise.wgsl';
 import Sum2DCode from '../shaders/algebra/sum_2d.wgsl';
@@ -1246,6 +1247,149 @@ export class CountShader implements ShaderEncoder {
             throw new Error("CountShader is not setup");
         }
         this.unsortedSegmentSumShader.encode(pass);
+    }
+}
+
+export class ScaleAndShiftIndexed2DShader implements ShaderEncoder {
+    readonly M1: number;
+    readonly M2: number;
+    readonly K: number
+
+    dimsUniformBuffer: GPUBuffer;
+    assignmentBuffer: GPUBuffer;
+    scaleBuffer: GPUBuffer;
+    shiftBuffer: GPUBuffer;
+    dataBuffer: GPUBuffer;
+
+    bindGroup: GPUBindGroup;
+    pipeline: GPUComputePipeline;
+    nTPB: number;
+
+    isSetup: boolean = false;
+
+    constructor(M1: number, M2: number, K: number, nTPB: number = 32) {
+        this.M1 = M1;
+        this.M2 = M2;
+        this.K = K;
+        this.nTPB = nTPB;
+    }
+
+    async setup(
+        device: GPUDevice, 
+        dataBuffer: GPUBuffer,
+        assignmentGPUBuffer: GPUBuffer, 
+        scaleBuffer: GPUBuffer, 
+        shiftBuffer: GPUBuffer, 
+    ) {
+        this.dataBuffer = dataBuffer;
+        this.assignmentBuffer = assignmentGPUBuffer;
+        this.scaleBuffer = scaleBuffer;
+        this.shiftBuffer = shiftBuffer;
+        this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M1, this.K, this.M2, this.K]));
+
+
+        let bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "uniform"
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 4,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "storage"
+                    }
+                }
+            ]
+        });
+
+        this.bindGroup = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.dimsUniformBuffer,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.assignmentBuffer,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.scaleBuffer,
+                    }
+                },
+                {
+                    binding: 3,
+                    resource: {
+                        buffer: this.shiftBuffer,
+                    }
+                },
+                {
+                    binding: 4,
+                    resource: {
+                        buffer: this.dataBuffer,
+                    }
+                }
+            ]
+        });
+
+        let pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        });
+
+        let shaderCode = device.createShaderModule({
+            code: ScaleAndShiftIndexed2DCode
+        });
+
+        this.pipeline = device.createComputePipeline({
+            layout: pipelineLayout,
+            compute: {
+                module: shaderCode,
+                entryPoint: "main",
+                constants: {
+                    nTPB: this.nTPB,
+                }
+            }
+        });
+
+        this.isSetup = true;
+    }
+
+    encode(pass: GPUComputePassEncoder) {
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.bindGroup);
+        pass.dispatchWorkgroups(Math.ceil(this.M1/this.nTPB), this.K)
     }
 }
 

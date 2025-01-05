@@ -1,3 +1,4 @@
+import CopyKeyCode from '../shaders/rng/copy_key.wgsl';
 import ThreeFryCode from '../shaders/rng/threefry.wgsl';
 import BoxMullerCode from '../shaders/rng/boxmuller.wgsl';
 import UniformCode from '../shaders/rng/uniform.wgsl';
@@ -101,6 +102,104 @@ export class ThreeFryShader implements ShaderEncoder {
         pass.setBindGroup(0, this.bindGroup);
         let N_workgroups = Math.ceil(this.N / this.nTPB);
         pass.dispatchWorkgroups(N_workgroups,1,1);
+    }
+}
+
+export class CopyKeyShader implements ShaderEncoder {
+    N: number;
+    index: number;
+
+    indexUniformBuffer: GPUBuffer;
+    seedBuffer: GPUBuffer;
+    outputBuffer: GPUBuffer;
+
+    bindGroup: GPUBindGroup;
+    pipeline: GPUComputePipeline;
+    constructor(index: number) {
+        this.index = index;
+    }
+
+    async setup(device: GPUDevice, seedBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
+        if (seedBuffer.size / 4 < (this.index+1) * 4) {
+            throw new Error(`seedBuffer size must be greater than ${(this.index+1)*4}, but got ${seedBuffer.size / 4}`);
+        }
+        this.indexUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.index]));
+        this.seedBuffer = seedBuffer;
+        this.outputBuffer = outputBuffer;
+
+        let bindGroupLayout = device.createBindGroupLayout({
+            label: "CopyKey BGL",
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "uniform"
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "storage"
+                    }
+                }
+            ]
+        });
+
+        this.bindGroup = device.createBindGroup({
+            label: "CopyKey BG",
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.indexUniformBuffer,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: seedBuffer
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: outputBuffer
+                    }
+                }
+            ]
+        });
+
+        let pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        });
+
+        let shaderModule = device.createShaderModule({
+            code: CopyKeyCode
+        });
+
+        this.pipeline = device.createComputePipeline({
+            layout: pipelineLayout,
+            compute: {
+                module: shaderModule,
+                entryPoint: "main",
+            }
+        });
+    }
+
+    encode(pass:GPUComputePassEncoder) {
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.bindGroup);
+        pass.dispatchWorkgroups(1,1,1);
     }
 }
 
@@ -367,11 +466,11 @@ export class CategoricalShader implements ShaderEncoder {
 
     async setup(device: GPUDevice, seedUniformBuffer: GPUBuffer, logprobsBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
         if (logprobsBuffer.size /4 !== this.K ) {
-            throw new Error(`logprobsBuffer size must be euqal to ${this.K}, but got ${logprobsBuffer.size /4 }`);
+            throw new Error(`logprobsBuffer size must be equal to ${this.K}, but got ${logprobsBuffer.size /4 }`);
         }
 
         if (outputBuffer.size /4 !== this.N ) {
-            throw new Error(`outputBuffer size must be euqal to ${this.N}, but got ${outputBuffer.size /4 }`);
+            throw new Error(`outputBuffer size must be equal to ${this.N}, but got ${outputBuffer.size /4 }`);
         }
 
         this.seedUniformBuffer = seedUniformBuffer;
@@ -507,71 +606,6 @@ export class GammaShader implements ShaderEncoder {
 
     encode(pass: GPUComputePassEncoder): void {
         throw new Error("Method not implemented.");
-    }
-}
-
-export class GaussianMixtureModelShader implements ShaderEncoder {
-    M: number;
-    N: number;
-    K: number;
-    nTPB: number;
-
-    dimensionsBuffer: GPUBuffer;
-    seedUniformBuffer: GPUBuffer;
-    proportionBuffer: GPUBuffer;
-    meanBuffer: GPUBuffer;
-    covarianceBuffer: GPUBuffer;
-    outputBuffer: GPUBuffer;
-    assignmentBuffer: GPUBuffer;
-
-    normalShader: NormalShader;
-    categoricalShader: CategoricalShader;
-
-    isSetup: boolean = false;
-
-    /**
-     * 
-     * @param M - Number of samples
-     * @param N - Number of dimensions
-     * @param K  - Number of components
-     * @param nTPB - Number of threads per block
-     */
-    constructor(M: number, N: number, K: number, nTPB: number = 32) {
-        this.M = M;
-        this.N = N;
-        this.K = K;
-        this.nTPB = nTPB;
-
-        this.categoricalShader = new CategoricalShader(this.M, this.K);
-        // this.normalShader = new NormalShader(this.N * this.D);
-    }
-
-    async setup(
-        device: GPUDevice, 
-        seedUniformBuffer: GPUBuffer, 
-        proportionBuffer: GPUBuffer,
-        meanBuffer: GPUBuffer, 
-        covarianceBuffer: GPUBuffer, 
-        outputBuffer: GPUBuffer, 
-        assignmentBuffer: GPUBuffer, 
-    ) {
-
-        this.seedUniformBuffer = seedUniformBuffer;
-        this.proportionBuffer = proportionBuffer;
-        this.meanBuffer = meanBuffer;
-        this.covarianceBuffer = covarianceBuffer;
-        this.outputBuffer = outputBuffer;
-        this.assignmentBuffer = assignmentBuffer;
-
-        await this.categoricalShader.setup(device, seedUniformBuffer, proportionBuffer, assignmentBuffer);
-        this.isSetup = true;
-    }
-
-    encode(pass: GPUComputePassEncoder): void {
-        if (!this.isSetup) {
-            throw new Error("Gaussian Mixture Model shader not setup");
-        }
-        this.categoricalShader.encode(pass);
     }
 }
 

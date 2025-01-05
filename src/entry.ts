@@ -1,5 +1,6 @@
 import Plotly from 'plotly.js-dist';
 import {KMeansShader, kmeans} from './k_means/kmeans.ts'
+import { GaussianMixtureModelShader } from './gmm/gmm.ts';
 import {GPUUtils} from './utils/gpu.ts'
 import {Ops} from './utils/ops.ts'
 import {Random} from './utils/rng.ts'
@@ -15,22 +16,30 @@ export default async function init(
     alphaMode: 'opaque',
   });
 
-  let M = 10;
-  let N = 2;
-  let K = 4;
+  let M = 33; // Number of samples
+  let N = 2; // Number of features
+  let K = 3; // Number of clusters
   
-  let seedUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([0, 0, 0, 0]));
-  let proportionsBuffer = GPUUtils.createStorageBuffer(device, new Float32Array([0.1, 0.2, 0.3, 0.4]));
+  let seedBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array([1, 2, 3, 4, 5, 6, 7, 8]));
+  let proportionsBuffer = GPUUtils.createStorageBuffer(device, new Float32Array([Math.log(0.05), Math.log(.7), Math.log(0.25)]));
   let assignmentBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(M));
   let outputBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(M*N));
+  let meansBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(
+    [0.0, 10.0, -10.0, 
+      0.0, 10.0, -5.0]
+  ));
+  let covarianceBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(
+    [1.0, 1.0, 1.0, 
+      1.0, 1.0, 1.0]
+  ));
 
-  const gmmShader = new Random.GaussianMixtureModelShader(M, N, K);
+  const gmmShader = new GaussianMixtureModelShader(M, N, K);
   await gmmShader.setup(
     device,
-    seedUniformBuffer,
+    seedBuffer,
     proportionsBuffer,
-    null,
-    null,
+    meansBuffer,
+    covarianceBuffer,
     outputBuffer,
     assignmentBuffer
   )
@@ -42,7 +51,34 @@ export default async function init(
   pass.end();
   device.queue.submit([encoder.finish()]);
 
-  await GPUUtils.log(device, gmmShader.assignmentBuffer, true);
+  let assignments = await GPUUtils.writeToCPU(device, gmmShader.assignmentBuffer, M * 4);
+  let data = await GPUUtils.writeToCPU(device, gmmShader.outputBuffer, M * N * 4, false);
+  console.log(assignments);
+  console.log(data.slice(0, M))
+  console.log(data.slice(M, 2*M))
+
+  // const data = new Float32Array(output);
+  // const segmentIds = new Uint32Array(assignments);
+
+  const trace = {
+    x: data.slice(0, M),
+    y: data.slice(M, 2*M),
+    mode: 'markers',
+    marker: {
+      color: assignments,
+      colorscale: 'Viridis',
+      size: 10,
+    },
+    type: 'scatter',
+  };
+
+  const layout = {
+    title: 'Scatter plot of data points',
+    xaxis: { title: 'X' },
+    yaxis: { title: 'Y' },
+  };
+
+  Plotly.newPlot('test', [trace], layout);
 
   // let data = new Float32Array(M*N);
   // for(let i = 0 ; i < M*N ; i++) {
