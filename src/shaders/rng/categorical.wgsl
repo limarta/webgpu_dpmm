@@ -1,5 +1,5 @@
 @group(0) @binding(0) var<uniform> dims: vec2u; // number of samples
-@group(0) @binding(1) var<storage> rng: array<f32>; // N*K random numbers
+@group(0) @binding(1) var<storage> uniform_rng: array<f32>; // N*K random numbers
 @group(0) @binding(2) var<storage> logp: array<f32>; // K log probabilities
 @group(0) @binding(3) var<storage, read_write> output: array<u32>;
 
@@ -29,7 +29,7 @@ fn sample(idx: u32, K: u32) -> u32 {
     var max_idx: u32 = 0;
     for (var k: u32 = 0u; k < K; k = k + 1u) {
         let logp_k: f32 = logp[k];
-        let a: f32 = gumbel(rng[idx + k]);
+        let a: f32 = gumbel(uniform_rng[idx + k]);
         let val: f32 = logp_k + a;
         if (val > max_val) {
             max_val = val;

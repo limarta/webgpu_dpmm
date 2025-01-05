@@ -3,7 +3,7 @@
 @group(0) @binding(1) var<uniform> N: u32;
 @group(0) @binding(2) var<storage,read_write> rng: array<vec4u>;
 
-override nTPB:u32 = 16;
+override nTPB:u32 = 32;
 const N_w: u32 = 4;
 const C20: u32 = 0xA9FC1A22;
 const R: u32 = 12;

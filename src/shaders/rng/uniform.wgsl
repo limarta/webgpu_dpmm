@@ -1,8 +1,8 @@
 @group(0) @binding(0) var<uniform> N: u32;
-@group(0) @binding(1) var<storage> rng: array<vec4u>;
-@group(0) @binding(2) var<storage, read_write> samples: array<vec4f>;
+@group(0) @binding(1) var<storage> rng: array<u32>;
+@group(0) @binding(2) var<storage, read_write> samples: array<f32>;
 
-override nTPB: u32 = 16;
+override nTPB: u32 = 32;
 const MAX: u32 = 0xFFFFFFFF;
 
 @compute @workgroup_size(nTPB, 1, 1)
@@ -13,5 +13,5 @@ fn uni(
     if (idx >= N) {
         return;
     }
-    samples[idx] = vec4f(rng[idx]) / f32(MAX);
+    samples[idx] = f32(rng[idx]) / f32(MAX);
 }

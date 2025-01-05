@@ -205,7 +205,7 @@ export class CopyKeyShader implements ShaderEncoder {
 
 export class UniformShader implements ShaderEncoder {
     readonly N: number
-    readonly bufferLength: number
+    readonly rngBufferLength: number
     nTPB: number
 
     seedUniformBuffer: GPUBuffer
@@ -221,16 +221,21 @@ export class UniformShader implements ShaderEncoder {
 
     constructor(N: number, nTPB: number = 32) {
         this.N = N;
-        this.bufferLength = Math.ceil(N / 4)*4;
+        this.rngBufferLength = Math.ceil(N / 4)*4;
+        console.log(this.rngBufferLength)
         this.nTPB = nTPB;
 
-        this.threeFryShader = new ThreeFryShader(this.bufferLength);
+        this.threeFryShader = new ThreeFryShader(this.rngBufferLength);
     }
 
     async setup(device: GPUDevice, seedUniformBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
+        if (outputBuffer.size / 4 !== this.N) {
+            throw new Error(`outputBuffer size must be equal to ${this.N}, but got ${outputBuffer.size / 4}`);
+        }
+
         this.seedUniformBuffer = seedUniformBuffer;
         this.lengthBuffer = GPUUtils.createUniform(device, new Uint32Array([this.N]));
-        this.rngBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(this.bufferLength));
+        this.rngBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(this.rngBufferLength));
         this.outputBuffer = outputBuffer
 
         const bindGroupLayout = device.createBindGroupLayout({
@@ -447,7 +452,7 @@ export class CategoricalShader implements ShaderEncoder {
     seedUniformBuffer: GPUBuffer
     lengthUniformBuffer: GPUBuffer
     logprobsBuffer: GPUBuffer
-    rngBuffer: GPUBuffer
+    uniformSamplesBuffer: GPUBuffer
     outputBuffer: GPUBuffer
 
     pipeline: GPUComputePipeline
@@ -476,7 +481,7 @@ export class CategoricalShader implements ShaderEncoder {
         this.seedUniformBuffer = seedUniformBuffer;
         this.lengthUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.N, this.K]));
         this.logprobsBuffer = logprobsBuffer;
-        this.rngBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.N * this.K));
+        this.uniformSamplesBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.N * this.K));
         this.outputBuffer = outputBuffer;
 
         let bindGroupGroupLayout = device.createBindGroupLayout({
@@ -526,7 +531,7 @@ export class CategoricalShader implements ShaderEncoder {
                 {
                     binding: 1,
                     resource: {
-                        buffer: this.rngBuffer
+                        buffer: this.uniformSamplesBuffer
                     }
                 },
                 {
@@ -563,7 +568,7 @@ export class CategoricalShader implements ShaderEncoder {
         });
 
 
-        await this.uniformShader.setup(device, seedUniformBuffer, this.rngBuffer)
+        await this.uniformShader.setup(device, seedUniformBuffer, this.uniformSamplesBuffer)
 
         this.isSetup = true;
     }
