@@ -24,6 +24,6 @@ fn main(
     }
 
     let label: u32 = assignments[idx];
-    let index: u32 = label + M2 * idy;
+    let index: u32 = label + N1 * idy;
     arr[idx + M1 * idy] = scale[index] * arr[idx + M1 * idy] + shift[index];
 }

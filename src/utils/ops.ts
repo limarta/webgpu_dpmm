@@ -568,13 +568,10 @@ export class Sum2DShader implements ShaderEncoder {
         var lastBuffer = true;
         for (let i = 1 ; i < this.columnSizes.length-2; i++) {
             let num_workgroups = this.columnSizes[i+1];
-            // console.log(num_workgroups)
             if (i%2 == 1) {
-                // console.log("bg2")
                 lastBuffer = false;
                 pass.setBindGroup(0, this.bindGroup_1, [i*Sum2DShader.UNIFORM_STRIDE]);
             } else {
-                // console.log("bg1")
                 lastBuffer = true;
                 pass.setBindGroup(0, this.bindGroup_2, [i*Sum2DShader.UNIFORM_STRIDE]);    
             }
@@ -1389,7 +1386,7 @@ export class ScaleAndShiftIndexed2DShader implements ShaderEncoder {
     encode(pass: GPUComputePassEncoder) {
         pass.setPipeline(this.pipeline);
         pass.setBindGroup(0, this.bindGroup);
-        pass.dispatchWorkgroups(Math.ceil(this.M1/this.nTPB), this.K)
+        pass.dispatchWorkgroups(Math.ceil(this.M1/this.nTPB), this.M2)
     }
 }
 

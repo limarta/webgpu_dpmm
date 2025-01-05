@@ -222,7 +222,6 @@ export class UniformShader implements ShaderEncoder {
     constructor(N: number, nTPB: number = 32) {
         this.N = N;
         this.rngBufferLength = Math.ceil(N / 4)*4;
-        console.log(this.rngBufferLength)
         this.nTPB = nTPB;
 
         this.threeFryShader = new ThreeFryShader(this.rngBufferLength);

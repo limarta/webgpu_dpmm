@@ -17,7 +17,7 @@ export default async function init(
   });
 
 
-  let M = 7; // Number of samples
+  let M = 1000; // Number of samples
   let N = 2; // Number of features
   let K = 3; // Number of clusters
   
@@ -55,31 +55,32 @@ export default async function init(
   let assignments = await GPUUtils.writeToCPU(device, gmmShader.assignmentBuffer, M * 4);
   let data = await GPUUtils.writeToCPU(device, gmmShader.outputBuffer, M * N * 4, false);
   console.log(assignments);
-  console.log(data.slice(0, M))
-  console.log(data.slice(M, 2*M))
+  console.log(data)
+  // console.log(data.slice(0, M))
+  // console.log(data.slice(M, 2*M))
 
   // // const data = new Float32Array(output);
   // // const segmentIds = new Uint32Array(assignments);
 
-  // const trace = {
-  //   x: data.slice(0, M),
-  //   y: data.slice(M, 2*M),
-  //   mode: 'markers',
-  //   marker: {
-  //     color: assignments,
-  //     colorscale: 'Viridis',
-  //     size: 10,
-  //   },
-  //   type: 'scatter',
-  // };
+  const trace = {
+    x: data.slice(0, M),
+    y: data.slice(M, 2*M),
+    mode: 'markers',
+    marker: {
+      color: assignments,
+      colorscale: 'Viridis',
+      size: 10,
+    },
+    type: 'scatter',
+  };
 
-  // const layout = {
-  //   title: 'Scatter plot of data points',
-  //   xaxis: { title: 'X' },
-  //   yaxis: { title: 'Y' },
-  // };
+  const layout = {
+    title: 'Scatter plot of data points',
+    xaxis: { title: 'X' },
+    yaxis: { title: 'Y' },
+  };
 
-  // Plotly.newPlot('test', [trace], layout);
+  Plotly.newPlot('test', [trace], layout);
 
   // let data = new Float32Array(M*N);
   // for(let i = 0 ; i < M*N ; i++) {
