@@ -1,5 +1,6 @@
 import './style.css'
 import init from './entry';
+import * as fs from 'fs';
 import { assert } from './utils/util';
 
 async function initializeWebGPU() {
