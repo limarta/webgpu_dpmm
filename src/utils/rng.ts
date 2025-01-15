@@ -657,11 +657,11 @@ export class GammaShader implements ShaderEncoder {
         this.nTPB = nTPB;
 
 
-        this.threeFryShader = new ThreeFryShader(this.N);
-        this.normalShader = new NormalShader(4*this.N);
-        this.uniformShader = new UniformShader(4*this.N);
+        this.threeFryShader = new ThreeFryShader(8);
         this.copyShader1 = new Random.CopyKeyShader(0);
         this.copyShader2 = new Random.CopyKeyShader(1);
+        this.normalShader = new NormalShader(4*this.N);
+        this.uniformShader = new UniformShader(4*this.N);
     }
 
     async setup(device: GPUDevice, seedBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
@@ -818,8 +818,195 @@ export class GammaShader implements ShaderEncoder {
         this.uniformShader.destroy();
         this.normalShader.destroy();
     }
-
 }
+
+export class Gamma2DShader implements ShaderEncoder {
+    M: number
+    N: number
+    nTPB: number
+
+    dimsUniformBuffer: GPUBuffer;
+    seedBuffer: GPUBuffer;
+    subSeedBuffer: GPUBuffer;
+    uniformSeedBuffer: GPUBuffer;
+    normalSeedBuffer: GPUBuffer;
+    uniformRNGBuffer: GPUBuffer;
+    normalRNGBuffer: GPUBuffer;
+    shapeBuffer: GPUBuffer;
+    outputBuffer: GPUBuffer;
+
+    bindGroup: GPUBindGroup;
+    pipeline: GPUComputePipeline;
+
+    threeFryShader: ThreeFryShader;
+    copyShader1: CopyKeyShader;
+    copyShader2: CopyKeyShader;
+    normalShader: NormalShader;
+    uniformShader: UniformShader;
+
+    isSetup: boolean = false;
+
+    constructor(M: number, N: number, nTPB: number = 32) {
+        this.M = M;
+        this.N = N;
+        this.nTPB = nTPB;
+
+        this.threeFryShader = new ThreeFryShader(8);
+        this.copyShader1 = new CopyKeyShader(0);
+        this.copyShader2 = new CopyKeyShader(1);
+
+        this.normalShader = new NormalShader(4*this.M*this.N);
+        this.uniformShader = new UniformShader(4*this.M*this.N);
+    }
+
+    async setup(device: GPUDevice, seedBuffer: GPUBuffer, shapeBuffer: GPUBuffer, outputBuffer: GPUBuffer) {
+        this.seedBuffer = seedBuffer;
+        this.shapeBuffer = shapeBuffer;
+        this.outputBuffer = outputBuffer;
+
+        this.dimsUniformBuffer = GPUUtils.createUniform(device, new Uint32Array([this.M, this.N]));
+        this.subSeedBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(8));
+        this.uniformSeedBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(4));
+        this.normalSeedBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(4));
+        this.uniformRNGBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.M * this.N))
+        this.normalRNGBuffer = GPUUtils.createStorageBuffer(device, new Float32Array(this.M * this.N))
+
+        let bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "uniform"
+                    }
+                }
+            ]
+        })
+
+        this.bindGroup = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        "buffer": this.dimsUniformBuffer
+                    }
+                }
+            ]
+        });
+
+        await this.threeFryShader.setup(device, seedBuffer, this.subSeedBuffer);
+        await this.copyShader1.setup(device, this.subSeedBuffer, this.uniformSeedBuffer);
+        await this.copyShader2.setup(device, this.subSeedBuffer, this.normalSeedBuffer);
+        await this.normalShader.setup(device, this.normalSeedBuffer, this.normalRNGBuffer)
+        await this.uniformShader.setup(device, this.uniformSeedBuffer, this.uniformRNGBuffer)
+
+        this.isSetup = true;
+    }
+
+    encode(pass: GPUComputePassEncoder) {
+        if (!this.isSetup) {
+            throw new Error("Shader not setup");
+        }
+        this.threeFryShader.encode(pass);
+        this.copyShader1.encode(pass);
+        this.copyShader2.encode(pass);
+        this.uniformShader.encode(pass);
+        this.normalShader.encode(pass);
+    }
+
+    destroy() {
+        this.threeFryShader.destroy();
+        this.copyShader1.destroy();
+        this.copyShader2.destroy();
+        this.uniformShader.destroy();
+        this.normalShader.destroy();
+
+        this.subSeedBuffer.destroy();
+        this.uniformSeedBuffer.destroy();
+        this.normalSeedBuffer.destroy();
+        this.uniformRNGBuffer.destroy();
+        this.uniformRNGBuffer.destroy();
+    }
+}
+
+// export class DirichletSampler implements ShaderEncoder {
+//     K: number;
+//     nTPB: number;
+
+//     dimsUniformBuffer: GPUBuffer;
+//     seedBuffer: GPUBuffer;
+//     subSeedBuffer: GPUBuffer;
+//     outputBuffer: GPUBuffer;
+
+//     bindGroup: GPUBindGroup
+//     pipeline: GPUComputePipeline
+
+//     constructor(K: number, nTPB: number = 32) {
+//         this.K = K;
+//         this.nTPB = nTPB;
+//     }
+
+//     async setup(device:GPUDevice, seedBuffer:GPUBuffer, outputBuffer:GPUBuffer) {
+//         this.seedBuffer = seedBuffer;
+//         this.outputBuffer = outputBuffer;
+
+//         this.dimsUniformBuffer = GPUUtils.createUniform(device, new Float32Array([this.K]));
+//         // this.normalUniformSeed = GPUUtils.createUniform(device, )
+//         this.subSeedBuffer =  GPUUtils.createStorageBuffer(device, new Uint32Array(8))
+//         this.uniformSeedBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(4))
+//         this.uniformSeedBuffer = GPUUtils.createStorageBuffer(device, new Uint32Array(4))
+
+//         let bindGroupLayout = device.createBindGroupLayout({
+//             entries: [
+//                 {
+//                     binding: 0,
+//                     visibility: GPUShaderStage.COMPUTE,
+//                     buffer: {
+//                         type: "uniform"
+//                     }
+//                 },
+//                 {
+//                     binding: 1,
+//                     visibility: GPUShaderStage.COMPUTE,
+//                     buffer: {
+//                         type: "read-only-storage"
+//                     }
+//                 },
+//                 {
+//                     binding: 2,
+//                     visibility: GPUShaderStage.COMPUTE,
+//                     buffer: {
+//                         type: "storage"
+//                     }
+//                 }
+//             ]
+//         })
+
+//         this.bindGroup = device.createBindGroup({
+//             layout: bindGroupLayout,
+//             entries: [
+//                 {
+//                     binding: 0,
+//                     resource: {
+//                         "buffer": this.dimsUniformBuffer
+//                     }
+//                 }
+//             ]
+
+//         });
+//     }
+
+//     encode(pass:GPUComputePassEncoder) {
+
+//     }
+
+//     destroy() {
+//         this.dimsUniformBuffer.destroy()
+//     }
+
+
+// }
 
 
 }
