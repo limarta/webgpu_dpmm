@@ -68,6 +68,15 @@ class KMeansShader implements ShaderEncoder {
     }
   }
 
+  destroy() {
+    this.countsBuffer.destroy();
+    this.meansBuffer.destroy();
+    this.meansBufferTranspose.destroy()
+    for(let shader of this.shaders) {
+      shader.destroy();
+    }
+  }
+
 }
 
 async function kmeans(device: GPUDevice, M: number, N: number, K: number, data, segmentIds) {
@@ -92,6 +101,7 @@ async function kmeans(device: GPUDevice, M: number, N: number, K: number, data, 
     segmentIds: segmentIdsArray,
     means: meansArray
   }
+
 }
 
 export {KMeansShader, kmeans}

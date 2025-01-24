@@ -23,4 +23,32 @@ async function initializeWebGPU() {
   init(context, device); 
 }
 
-initializeWebGPU();
+const dropArea = document.querySelector('#drop-area') as HTMLElement;
+assert(dropArea !== null);
+
+dropArea.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  dropArea.classList.add('dragover');
+});
+
+dropArea.addEventListener('dragleave', () => {
+  dropArea.classList.remove('dragover');
+});
+
+dropArea.addEventListener('drop', async (event) => {
+  event.preventDefault();
+  dropArea.classList.remove('dragover');
+
+      console.log("Ran webgpu")
+  const files = event.dataTransfer?.files;
+  if (files && files.length > 0) {
+    const file = files[0];
+    if (file.type === 'text/csv') {
+      const text = await file.text();
+      const rows = text.split('\n').map(row => row.split(','));
+      initializeWebGPU();
+    } else {
+      console.error('Please drop a CSV file.');
+    }
+  }
+});
